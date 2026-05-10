@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mycroclean - Genera Offerta Noleggio PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(27,42,74,0.1);max-width:520px;width:90%;overflow:hidden}
+.hdr{background:#D6246E;padding:24px 28px;display:flex;align-items:center;gap:16px}
+.logo{width:52px;height:52px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo span{color:#D6246E;font-weight:900;font-size:22px}
+.hdr h1{color:#fff;font-size:18px;font-weight:700}
+.hdr p{color:#ffcce0;font-size:12px;margin-top:2px}
+.body{padding:28px}
+.info{margin-bottom:20px}
+.info .label{font-size:11px;color:#6b7b8d;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.info .value{font-size:16px;color:#1B2A4A;font-weight:700}
+.info .sub{font-size:13px;color:#6b7b8d;margin-top:2px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:24px}
+.stat{background:#f0f4f8;border-radius:8px;padding:12px;text-align:center}
+.stat .num{font-size:16px;font-weight:700;color:#1B2A4A}
+.stat .lbl{font-size:9px;color:#6b7b8d;text-transform:uppercase;margin-top:2px}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#D6246E,#e84393);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:all 0.2s;margin-bottom:8px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(214,36,110,0.35)}
+.btn:disabled{opacity:0.5;cursor:wait;transform:none;box-shadow:none}
+.btn2{background:linear-gradient(135deg,#1B2A4A,#2d4a7a);font-size:13px;padding:11px}
+.nodata{text-align:center;padding:30px 20px}
+.nodata h2{color:#1B2A4A;margin-bottom:8px}
+.nodata p{color:#6b7b8d;font-size:13px;line-height:1.6}
+.nodata textarea{width:100%;height:180px;margin-top:14px;border:2px solid #d0d8e0;border-radius:8px;padding:10px;font-size:11px;font-family:monospace;resize:vertical}
+.row-preview{max-height:200px;overflow-y:auto;margin-bottom:16px;border:1px solid #e5e1da;border-radius:8px}
+.row-preview table{width:100%;border-collapse:collapse;font-size:11px}
+.row-preview th{background:#1B2A4A;color:#fff;padding:6px 8px;text-align:left;font-size:10px;position:sticky;top:0}
+.row-preview td{padding:5px 8px;border-bottom:1px solid #f0f0f0}
+.row-preview tr:nth-child(even){background:#f8f8f8}
+</style>
+</head>
+<body>
+<div class="card" id="app">
+<div class="hdr">
+<div class="logo"><span>M:</span></div>
+<div><h1>Offerta Noleggio PDF</h1><p>Mycroclean Italia&reg;</p></div>
+</div>
+<div class="body" id="content"><p style="text-align:center;color:#6b7b8d">Caricamento...</p></div>
+</div>
+<script>
+(function(){
+var content=document.getElementById('content');
+var params=new URLSearchParams(window.location.search);
+var dataParam=params.get('data');
+var offer=null;
+if(dataParam){try{offer=JSON.parse(decodeURIComponent(dataParam))}catch(e){try{offer=JSON.parse(dataParam)}catch(e2){}}}
+if(!offer){
+content.innerHTML='<div class="nodata"><h2>Genera Offerta Noleggio</h2><p>Incolla il JSON dell\'offerta generato da Airtable:</p><textarea id="jsonInput" placeholder=\'{"numero":"CN-001","cliente":"...","righe":[...]}\'></textarea><button class="btn" style="margin-top:10px" onclick="loadJSON()">Carica dati</button></div>';
+return;
+}
+renderOffer(offer);
+window.loadJSON=function(){try{offer=JSON.parse(document.getElementById('jsonInput').value);renderOffer(offer)}catch(e){alert('JSON non valido: '+e.message)}};
+
+function renderOffer(o){
+var righe=o.righe||[];
+var totRata=0;
+righe.forEach(function(r){
+var td=(r.nr_persone||0)*(r.dotazione||0);
+var cc=td*(r.prezzo_capo||0);
+var am=r.ammortamento_mesi||0;
+var ra=am>0?cc/am:0;
+var rl=(r.costo_lavaggio||0)*td*(r.cambi_settimana||0)*4.33;
+var sc=r.sconto||0;
+var rm=(ra+rl+(r.trasporto||0))*(1-sc/100);
+r._rata=rm;r._totdot=td;
+totRata+=rm;
+});
+var iva=parseFloat(o.iva)||22;
+var html='<div class="info"><div class="label">Contratto Noleggio</div><div class="value">'+(o.numero||'')+'</div><div class="sub">'+(o.cliente||'')+'</div></div>';
+html+='<div class="stats"><div class="stat"><div class="num">'+righe.length+'</div><div class="lbl">Righe</div></div>';
+html+='<div class="stat"><div class="num">&euro;'+Math.round(totRata).toLocaleString()+'</div><div class="lbl">Rata/mese</div></div>';
+html+='<div class="stat"><div class="num">&euro;'+Math.round(totRata*(1+iva/100)).toLocaleString()+'</div><div class="lbl">Con IVA</div></div></div>';
+if(righe.length>0){
+html+='<div class="row-preview"><table><tr><th>#</th><th>Descrizione</th><th>Tot.dot</th><th>Sc%</th><th>Rata/mese</th></tr>';
+righe.forEach(function(r,i){
+html+='<tr><td>'+(i+1)+'</td><td>'+(r.descrizione||'')+'</td><td>'+(r._totdot||'')+'</td><td>'+(r.sconto?r.sconto+'%':'—')+'</td><td>&euro;'+r._rata.toFixed(2)+'</td></tr>';
+});
+html+='</table></div>';
+}
+html+='<button class="btn" id="btnGen" onclick="genPDF()">&#128196; Scarica PDF</button>';
+html+='<button class="btn btn2" onclick="genPDF(true)">&#128065; Anteprima</button>';
+content.innerHTML=html;
+window._offer=o;
+}
+
+window.genPDF=function(preview){
+var btn=document.getElementById('btnGen');
+if(btn){btn.disabled=true;btn.textContent='Generazione...'}
+setTimeout(function(){
+try{createPDF(window._offer,preview)}catch(e){alert('Errore: '+e.message)}
+if(btn){btn.disabled=false;btn.textContent='\ud83d\udcc4 Scarica PDF'}
+},100);
+};
+
+function fD(d){if(!d)return'\u2014';try{return new Date(d).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}catch(e){return String(d)}}
+function fC(v){var n=parseFloat(v);if(isNaN(n))return'\u20ac 0,00';return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n)}
+
+function createPDF(o,preview){
+var jsPDF=window.jspdf.jsPDF;
+var doc=new jsPDF({unit:'mm',format:'a4'});
+var W=210,H=297;
+var M=[214,36,110],N=[27,42,74],Wh=[255,255,255],D=[27,42,74],Md=[107,123,141],L=[240,244,248],Ln=[208,216,224];
+var pageNum=0;
+
+function drawHeaderBar(){
+doc.setFillColor(M[0],M[1],M[2]);doc.rect(0,0,W,14,'F');
+doc.setFillColor(Wh[0],Wh[1],Wh[2]);doc.circle(11,7,4.5,'F');
+doc.setTextColor(M[0],M[1],M[2]);doc.setFont('helvetica','bold');doc.setFontSize(7);doc.text('M:',11,8,{align:'center'});
+doc.setTextColor(Wh[0],Wh[1],Wh[2]);doc.setFont('helvetica','bold');doc.setFontSize(10);
+doc.text('MYCROCLEAN ITALIA',20,8);
+doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text('Offerta Noleggio',20,12);
+pageNum++;doc.text('Pag. '+pageNum,W-15,9,{align:'right'});
+}
+
+function newPage(){if(pageNum>0){drawFooter();doc.addPage()}drawHeaderBar();return H-22}
+
+function drawFooter(){
+doc.setDrawColor(M[0],M[1],M[2]);doc.setLineWidth(1.2);doc.line(20,18,W-20,18);
+doc.setFillColor(M[0],M[1],M[2]);doc.rect(0,0,W,8,'F');
+doc.setFontSize(6.5);doc.setTextColor(Md[0],Md[1],Md[2]);
+doc.text('Mycroclean Italia\u00ae | Noleggio e Lavaggio Indumenti Clean Room | info@mycroclean.it',W/2,13,{align:'center'});
+doc.setTextColor(Wh[0],Wh[1],Wh[2]);doc.setFont('helvetica','bold');doc.setFontSize(5);
+doc.text('MYCROCLEAN ITALIA\u00ae',W/2,3.5,{align:'center'});
+}
+
+// Page 1 Header
+pageNum=1;
+doc.setFillColor(M[0],M[1],M[2]);doc.rect(0,0,W,32,'F');
+doc.setFillColor(Wh[0],Wh[1],Wh[2]);doc.circle(24,16,9,'F');
+doc.setTextColor(M[0],M[1],M[2]);doc.setFont('helvetica','bold');doc.setFontSize(14);doc.text('M:',24,18,{align:'center'});
+doc.setTextColor(Wh[0],Wh[1],Wh[2]);doc.setFontSize(20);doc.text('MYCROCLEAN',38,14);
+doc.setFont('helvetica','normal');doc.setFontSize(11);doc.text('ITALIA\u00ae',38,21);
+doc.setFontSize(7);doc.setTextColor(255,204,224);doc.text('Noleggio e lavaggio indumenti | Clean Room',38,28);
+doc.setFillColor(Wh[0],Wh[1],Wh[2]);doc.roundedRect(W-62,5,50,18,2,2,'F');
+doc.setTextColor(M[0],M[1],M[2]);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
+doc.text('CONTRATTO N\u00b0',W-37,12,{align:'center'});
+doc.setTextColor(N[0],N[1],N[2]);doc.setFontSize(15);doc.text(String(o.numero||''),W-37,20,{align:'center'});
+
+// Meta
+var y=40;
+var metas=[['DATA OFFERTA',fD(o.data),20],['VALIDIT\u00c0',fD(o.validita),55],['DURATA',o.durata||'',90],['PAGAMENTO',o.pagamento||'',125]];
+metas.forEach(function(m){
+doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(Md[0],Md[1],Md[2]);doc.text(m[0],m[2],y);
+doc.setFontSize(9.5);doc.setFont('helvetica','bold');doc.setTextColor(D[0],D[1],D[2]);doc.text(String(m[1]).substring(0,20),m[2],y+5);
+});
+y+=14;
+doc.setFillColor(L[0],L[1],L[2]);doc.roundedRect(20,y-4,W-40,18,2,2,'F');
+doc.setFillColor(M[0],M[1],M[2]);doc.rect(20,y-4,1.5,18,'F');
+doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(Md[0],Md[1],Md[2]);doc.text('DESTINATARIO',26,y);
+doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(N[0],N[1],N[2]);doc.text(String(o.cliente||''),26,y+7);
+var x2=W/2+10;
+doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(Md[0],Md[1],Md[2]);doc.text('TIPO SERVIZIO',x2,y);
+doc.setFontSize(9.5);doc.setFont('helvetica','bold');doc.setTextColor(D[0],D[1],D[2]);doc.text(String(o.tipo_servizio||''),x2,y+7);
+y+=20;
+
+// Corpo
+if(o.corpo){
+doc.setFillColor(M[0],M[1],M[2]);doc.circle(17,y+1,1.2,'F');
+doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(Md[0],Md[1],Md[2]);doc.text('OGGETTO',20,y);
+y+=5;doc.setFontSize(9);doc.setTextColor(D[0],D[1],D[2]);
+var bl=doc.splitTextToSize(String(o.corpo),W-40);doc.text(bl.slice(0,4),20,y);y+=Math.min(bl.length,4)*4+6;
+}
+
+// Table
+y+=2;
+var headers=['#','Descrizione','Pers.','Dot/p','Tot','Pr.capo','Lav.\u20ac','C/sett','Sc%','RATA MESE'];
+var hx=[14,20,70,82,94,104,122,138,152,166];
+
+doc.setFillColor(N[0],N[1],N[2]);doc.rect(12,y-5,W-24,8,'F');
+doc.setTextColor(Wh[0],Wh[1],Wh[2]);doc.setFontSize(6.5);doc.setFont('helvetica','bold');
+headers.forEach(function(h,i){doc.text(h,hx[i],y)});
+y+=6;
+
+var righe=o.righe||[];
+var grandRata=0;
+righe.forEach(function(r,idx){
+if(y>H-55){y=newPage()}
+var np=r.nr_persone||0,dp=r.dotazione||0,pp=r.prezzo_capo||0;
+var cl=r.costo_lavaggio||0,cs=r.cambi_settimana||0,am=r.ammortamento_mesi||0,tr=r.trasporto||0,sc=r.sconto||0;
+var td=np*dp,cc=td*pp;
+var ra=am>0?cc/am:0;
+var rl=cl*td*cs*4.33;
+var rm=(ra+rl+tr)*(1-sc/100);
+grandRata+=rm;
+if(idx%2===1){doc.setFillColor(L[0],L[1],L[2]);doc.rect(12,y-4,W-24,7,'F')}
+doc.setTextColor(D[0],D[1],D[2]);doc.setFontSize(7);doc.setFont('helvetica','normal');
+doc.text(String(idx+1),16,y,{align:'center'});
+doc.text(doc.splitTextToSize(String(r.descrizione||''),48)[0],20,y);
+doc.text(String(np||''),76,y,{align:'right'});
+doc.text(String(dp||''),88,y,{align:'right'});
+doc.text(String(td||''),100,y,{align:'right'});
+doc.text(fC(pp),120,y,{align:'right'});
+doc.text(cl?fC(cl):'\u2014',137,y,{align:'right'});
+doc.text(cs?String(cs):'',152,y,{align:'right'});
+doc.text(sc?sc+'%':'\u2014',162,y,{align:'right'});
+doc.setFont('helvetica','bold');doc.text(rm?fC(rm):'\u2014',196,y,{align:'right'});
+doc.setDrawColor(Ln[0],Ln[1],Ln[2]);doc.setLineWidth(0.3);doc.line(12,y+2,W-12,y+2);
+y+=7;
+});
+// Total row
+doc.setFillColor(230,220,240);doc.rect(12,y-4,W-24,8,'F');
+doc.setDrawColor(M[0],M[1],M[2]);doc.setLineWidth(0.8);doc.line(12,y-4,W-12,y-4);
+doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(D[0],D[1],D[2]);
+doc.text('TOTALE CANONE MENSILE',120,y,{align:'right'});
+doc.text(fC(grandRata),196,y,{align:'right'});
+y+=12;
+
+// Service summary
+if(y>H-80){y=newPage()}
+doc.setFillColor(M[0],M[1],M[2]);doc.circle(17,y+1,1.2,'F');
+doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(N[0],N[1],N[2]);
+doc.text('RIEPILOGO SERVIZIO',20,y);
+doc.setDrawColor(M[0],M[1],M[2]);doc.setLineWidth(0.8);doc.line(20,y-2,70,y-2);
+y+=8;
+var items=[['N. Operatori',o.n_operatori||''],['Cambi settimanali',o.n_cambi||''],['Frequenza lavaggi',o.freq_lavaggi||''],['Frequenza ritiro/consegna',o.freq_ritiro||''],['Costo logistica/servizio',fC(o.costo_logistica||0)],['Cauzione per capo',fC(o.cauzione||0)],['Penale smarrimento',fC(o.penale||0)],['Durata contratto',o.durata||'']];
+items.forEach(function(it){
+doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(Md[0],Md[1],Md[2]);doc.text(it[0],20,y);
+doc.setFont('helvetica','bold');doc.setTextColor(D[0],D[1],D[2]);doc.text(String(it[1]),W-20,y,{align:'right'});
+y+=5.5;doc.setDrawColor(Ln[0],Ln[1],Ln[2]);doc.setLineWidth(0.2);doc.line(20,y-2,W-20,y-2);
+});
+y+=6;
+
+// Totals
+if(y>H-50){y=newPage()}
+var txL=W-72,txR=W-20;
+var iva=parseFloat(o.iva)||22;
+doc.setFont('helvetica','normal');doc.setFontSize(10);
+doc.setTextColor(Md[0],Md[1],Md[2]);doc.text('Canone mensile',txL,y);
+doc.setTextColor(D[0],D[1],D[2]);doc.text(fC(grandRata),txR,y,{align:'right'});
+y+=6;doc.setTextColor(Md[0],Md[1],Md[2]);doc.text('IVA ('+iva+'%)',txL,y);
+doc.setTextColor(D[0],D[1],D[2]);doc.text(fC(grandRata*iva/100),txR,y,{align:'right'});
+y+=4;doc.setDrawColor(M[0],M[1],M[2]);doc.setLineWidth(1.5);doc.line(txL,y,txR,y);
+y+=7;doc.setFillColor(M[0],M[1],M[2]);doc.roundedRect(txL-4,y-5,txR-txL+8,13,2,2,'F');
+doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(255,176,204);doc.text('CANONE MENSILE',txL,y+2);
+doc.setTextColor(Wh[0],Wh[1],Wh[2]);doc.setFontSize(14);doc.text(fC(grandRata*(1+iva/100)),txR,y+2,{align:'right'});
+y+=18;
+
+// Notes
+if(y>H-55){y=newPage()}
+doc.setFillColor(M[0],M[1],M[2]);doc.circle(17,y+1,1.2,'F');
+doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(N[0],N[1],N[2]);
+doc.text('NOTE E CONDIZIONI',20,y);
+doc.setDrawColor(M[0],M[1],M[2]);doc.setLineWidth(0.8);doc.line(20,y-2,62,y-2);
+y+=7;doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(D[0],D[1],D[2]);
+var notes=['\u2022  Indumenti confezionati con cuciture a barriera.','\u2022  Servizio include lavaggio, sanificazione e ricondizionamento.','\u2022  Consegna e ritiro presso la sede del cliente.','\u2022  Tracciabilit\u00e0 RFID su ogni capo.','\u2022  Certificazioni: ISO 14644 | EN 340 | IEC 61340.'];
+if(o.note){o.note.split('\n').slice(0,3).forEach(function(l){notes.push('\u2022  '+l.trim())})}
+notes.forEach(function(n){if(y>H-25){y=newPage()}doc.text(n,20,y);y+=4.5});
+y+=8;
+
+// Signatures
+if(y>H-45){y=newPage()}
+doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.setTextColor(Md[0],Md[1],Md[2]);
+doc.text('Per accettazione del fornitore',20,y);doc.text('Per accettazione del cliente',W-82,y);
+doc.setDrawColor(Ln[0],Ln[1],Ln[2]);doc.setLineWidth(0.4);
+doc.line(20,y+14,82,y+14);doc.line(W-82,y+14,W-20,y+14);
+doc.setFontSize(7);doc.text('Firma e timbro',20,y+18);doc.text('Firma e timbro',W-82,y+18);
+
+drawFooter();
+var fn='Offerta_Noleggio_'+(o.numero||'N')+'.pdf';
+if(preview){window.open(URL.createObjectURL(doc.output('blob')),'_blank')}else{doc.save(fn)}
+}
+})();
+</script>
+</body>
+</html>
