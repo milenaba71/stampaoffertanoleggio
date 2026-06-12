@@ -98,7 +98,7 @@ var sItems=[['N. Operatori',o.n_operatori||''],['Cambi settimanali/operatore',o.
 var sHtml='';sItems.forEach(function(it){sHtml+='<div class="summary-item"><span class="lbl">'+it[0]+'</span><span class="val">'+it[1]+'</span></div>'});
 var refHtml='';
 if(o.referente_nome){
-refHtml='<div class="ref-box"><div class="box-label">REFERENTE COMMERCIALE</div><div class="box-value">'+o.referente_nome+'</div>'+(o.referente_email?'<div class="box-sub">\u2709 '+o.referente_email+'</div>':'')+'<div class="box-line">\u260e '+(o.telefono?'\u260e '+o.telefono+'<br>':'')+' <span class="blank-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div></div>';
+refHtml='<div class="ref-box"><div class="box-label">REFERENTE COMMERCIALE</div><div class="box-value">'+o.referente_nome+'</div>'+(o.referente_email?'<div class="box-sub">\u2709 '+o.referente_email+'</div>':'')+(o.telefono?'<div class="box-sub">\u260e '+o.telefono+'</div>':'')+'</div>';
 }
 document.getElementById('app').innerHTML='<div class="controls"><button class="btn" onclick="window.print()">\ud83d\udda8\ufe0f Stampa / Salva PDF</button><button class="btn btn2" onclick="window.print()">Ctrl+P</button></div>'+
 '<div class="page">'+
