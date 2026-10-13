@@ -117,6 +117,7 @@
     <input type="number" id="rollGap" value="2" min="0" max="20">
   </div>
   <div class="grp"><label>Copie/capo</label><input type="number" id="copie" value="1" min="1" max="50"></div>
+  <div class="grp"><label>Filtra</label><input type="text" id="filtro" placeholder="codici o nome…" style="width:150px;background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:13px"></div>
 
   <span id="toggles"></span>
 
@@ -152,23 +153,22 @@ if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.clo
 var FIELDS = [
   { key:'qr',       lab:'QR',        kind:'qr',     on:true,  x:2,  y:4 },
   { key:'bc',       lab:'Barcode',   kind:'bc',     on:true,  x:2,  y:60 },
-  { key:'cod',      lab:'Codice',    kind:'text',   on:true,  strong:true, x:38, y:4,  cols:['CODICE','codice','barcode'] },
-  { key:'nome',     lab:'Nome',      kind:'text',   on:true,  strong:true, x:38, y:17, cols:['NOME E COGNOME','nome e cognome','nome','cognome'] },
-  { key:'cliente',  lab:'Cliente',   kind:'text',   on:true,  x:38, y:30, cols:['CLIENT/AZIENDA','AZIENDA','azienda','cliente','client'] },
-  { key:'reparto',  lab:'Reparto',   kind:'text',   on:true,  x:38, y:42, prefix:'Reparto', cols:['REPARTO','reparto'] },
-  { key:'taglia',   lab:'Taglia',    kind:'taglia', on:true,  x:80, y:6,  cols:['TAGLIA','taglia','size'] },
+  { key:'cod',      lab:'Codice',    kind:'text',   on:true,  strong:true, x:38, y:4,  cols:['codice','CODICE'] },
+  { key:'nome',     lab:'Nome',      kind:'text',   on:true,  strong:true, x:38, y:17, cols:['fullname','NOME E COGNOME','nome cognome','nome e cognome','nome','cognome'] },
+  { key:'cliente',  lab:'Azienda',   kind:'text',   on:true,  x:38, y:30, cols:['azienda','AZIENDA','cliente','client'] },
+  { key:'reparto',  lab:'Reparto',   kind:'text',   on:true,  x:38, y:42, prefix:'Reparto', cols:['reparto','REPARTO'] },
+  { key:'taglia',   lab:'Taglia',    kind:'taglia', on:true,  x:80, y:6,  cols:['taglia','TAGLIA','size'] },
   { key:'logo',     lab:'Logo',      kind:'logo',   on:true,  x:74, y:52 },
-  { key:'armadio',  lab:'Armadio',   kind:'text',   on:false, x:38, y:54, prefix:'Armadio', cols:['ARMADIO','armadio'] },
-  { key:'posizione',lab:'Posizione', kind:'text',   on:false, x:38, y:62, prefix:'Posizione', cols:['POSIZIONE','posizione'] },
-  { key:'tipo',     lab:'Tipo',      kind:'text',   on:false, x:38, y:70, prefix:'Tipo', cols:['TIPO','tipo'] },
-  { key:'matricola',lab:'Matricola', kind:'text',   on:false, x:38, y:78, prefix:'Matr.', cols:['MATRICOLA','matricola'] },
-  { key:'iniziali', lab:'Iniziali',  kind:'text',   on:false, x:38, y:86, prefix:'Iniz.', cols:['INIZIALI','iniziali'] },
-  { key:'esterna',  lab:'Esterna',   kind:'text',   on:false, x:62, y:70, prefix:'Est.', cols:['ESTERNA','esterna'] },
-  { key:'lotto',    lab:'Lotto',     kind:'text',   on:false, x:62, y:78, prefix:'Lotto', cols:['LOTTO','lotto'] },
-  { key:'dataCr',   lab:'Data creaz.',kind:'text',  on:false, x:62, y:86, prefix:'Creato', cols:['DATA DI CREAZIONE','data di creazione','DATA','data'] },
-  { key:'dataPe',   lab:'Data pers.',kind:'text',   on:false, x:62, y:92, prefix:'Pers.', cols:['DATA DI PERSONALIZZAZIONE','data di personalizzazione'] },
-  { key:'lavaggi',  lab:'Lavaggi',   kind:'text',   on:false, x:62, y:62, prefix:'Lavaggi', cols:['NUMERO LAVAGGI','numero lavaggi esistenti','numero lavaggi','lavaggi'] },
-  { key:'note',     lab:'Note',      kind:'text',   on:false, x:38, y:94, prefix:'Note', cols:['NOTE','note'] }
+  { key:'armadio',  lab:'Armadio',   kind:'text',   on:false, x:38, y:54, prefix:'Armadio', cols:['armadio','ARMADIO'] },
+  { key:'posizione',lab:'Posizione', kind:'text',   on:false, x:38, y:62, prefix:'Posizione', cols:['posizione','POSIZIONE'] },
+  { key:'tipo',     lab:'Tipo',      kind:'text',   on:false, x:38, y:70, prefix:'Tipo', cols:['tipo','TIPO'] },
+  { key:'matricola',lab:'Matricola', kind:'text',   on:false, x:38, y:78, prefix:'Matr.', cols:['matricola','MATRICOLA'] },
+  { key:'iniziali', lab:'Iniziali',  kind:'text',   on:false, x:38, y:86, prefix:'Iniz.', cols:['iniziali','INIZIALI'] },
+  { key:'lotto',    lab:'Lotto',     kind:'text',   on:false, x:62, y:78, prefix:'Lotto', cols:['lotto','LOTTO'] },
+  { key:'dataCr',   lab:'Data',      kind:'text',   on:false, x:62, y:86, prefix:'Data', cols:['created_at','DATA DI CREAZIONE','data di creazione','DATA','data'] },
+  { key:'dataPe',   lab:'Data pers.',kind:'text',   on:false, x:62, y:92, prefix:'Pers.', cols:['data_personalizzazione','DATA DI PERSONALIZZAZIONE','data di personalizzazione'] },
+  { key:'esterna',  lab:'Esterna',   kind:'text',   on:false, x:62, y:70, prefix:'Est.', cols:['esterna','ESTERNA'] },
+  { key:'note',     lab:'Note',      kind:'text',   on:false, x:38, y:94, prefix:'Note', cols:['note','NOTE'] }
 ];
 
 // ===== stato =====
@@ -177,7 +177,7 @@ var LOGO = '';
 var EDIT = false;
 var MODE = 'data';     // 'data' (CSV / PDF con testo) | 'pdfimg' (PDF già impaginato)
 var PDFIMG = [];       // immagini pagine PDF (data URL)
-var LS_KEY = 'myc_etichetta_layout_v2';
+var LS_KEY = 'myc_etichetta_layout_v3';
 
 var DEFAULT_LAYOUT = {};
 FIELDS.forEach(function(f){ DEFAULT_LAYOUT[f.key] = {x:f.x, y:f.y}; });
@@ -249,9 +249,8 @@ function get(row, names){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
-// ===== PDF -> tabella =====
-async function parsePDF(arrbuf){
-  var pdf = await pdfjsLib.getDocument({data: arrbuf}).promise;
+// ===== PDF -> tabella (solo se il PDF ha testo vero) =====
+async function extractTableFromPdf(pdf){
   var allRows = [];
   for(var p=1; p<=pdf.numPages; p++){
     var page = await pdf.getPage(p);
@@ -306,13 +305,20 @@ function nearestCol(cols, x){
 }
 
 // ===== etichetta =====
+function cleanVal(v){
+  v = (v==null ? '' : String(v)).trim();
+  // l'export mette '.' o '-' nei campi vuoti: trattali come vuoti
+  if(/^[.\-–—\s]*$/.test(v)) return '';
+  return v;
+}
 function fieldValue(f, row){
   if(!f.cols) return '';
-  return get(row, f.cols);
+  return cleanVal(get(row, f.cols));
 }
 function buildLabel(row, hmm, largMm){
   var et=document.createElement('div'); et.className='et'; et.style.height=hmm+'mm';
-  var codice = get(row, ['CODICE','codice','barcode','matricola']);
+  // valore per QR/barcode: usa la colonna 'barcode' se presente, altrimenti 'codice'
+  var codice = cleanVal(get(row, ['barcode','codice','CODICE']));
 
   function place(el, key){
     el.classList.add('el'); el.dataset.key=key;
@@ -383,7 +389,19 @@ function render(){
   }
 
   if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
-  var items=[]; for(var j=0;j<ROWS.length;j++){ for(var c2=0;c2<copie;c2++) items.push(ROWS[j]); }
+
+  // filtro: mostra solo le righe che contengono uno dei termini (codici, nome, ecc.)
+  var base = ROWS;
+  var fq = (document.getElementById('filtro').value||'').trim().toLowerCase();
+  if(fq){
+    var terms = fq.split(/[\s,;\n]+/).filter(function(t){ return t.length; });
+    base = ROWS.filter(function(row){
+      var blob = Object.keys(row).map(function(k){ return row[k]; }).join(' ').toLowerCase();
+      return terms.some(function(t){ return blob.indexOf(t)!==-1; });
+    });
+  }
+
+  var items=[]; for(var j=0;j<base.length;j++){ for(var c2=0;c2<copie;c2++) items.push(base[j]); }
   if(document.getElementById('formato').value==='rotolo') renderRotolo(out, items);
   else renderA4(out, items);
 }
@@ -577,6 +595,7 @@ window.addEventListener('drop', function(e){ e.preventDefault();
 ['perRiga','hmm','copie','rollW','rollH','rollGap'].forEach(function(id){
   document.getElementById(id).addEventListener('change', render);
 });
+document.getElementById('filtro').addEventListener('input', render);
 document.getElementById('formato').addEventListener('change', function(){ updateFormatoUI(); render(); });
 document.getElementById('btnEdit').addEventListener('click', function(){
   EDIT=!EDIT; document.body.classList.toggle('editing',EDIT); this.classList.toggle('on',EDIT);
@@ -587,7 +606,8 @@ document.getElementById('btnReset').addEventListener('click', function(){
 });
 document.getElementById('btnPrint').addEventListener('click', function(){ window.print(); });
 document.getElementById('btnNew').addEventListener('click', function(){
-  ROWS=[]; fileInput.value=''; document.getElementById('drop').style.display='block'; render();
+  ROWS=[]; PDFIMG=[]; MODE='data'; fileInput.value='';
+  document.getElementById('drop').style.display='block'; render();
 });
 updateFormatoUI();
 </script>
