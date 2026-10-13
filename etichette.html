@@ -40,7 +40,10 @@
   #toolbar button:hover { background:#1d4ed8; }
   #toolbar button.ghost { background:#334155; }
   #toolbar button.ghost:hover { background:#475569; }
+  #toolbar button.imgbtn { background:#0e7490; }
+  #toolbar button.imgbtn:hover { background:#0c5f78; }
   #count { font-size:12px; opacity:.8; }
+  #logoName { font-size:11px; opacity:.8; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* ---------- Drop zone ---------- */
   #drop {
@@ -68,15 +71,31 @@
     align-items:center; overflow:hidden;
     page-break-inside:avoid; break-inside:avoid;
   }
+  /* SINISTRA: codice (QR + barcode) */
   .et .codes { display:flex; flex-direction:column; align-items:center; gap:1mm; flex:0 0 auto; }
   .et .qr svg { display:block; }
   .et .bc svg  { display:block; }
+
+  /* CENTRO: info */
   .et .info { flex:1 1 auto; min-width:0; line-height:1.2; }
-  .et .info .az { font-weight:700; font-size:3.4mm; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .et .info .nm { font-size:3.1mm; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .et .info .rw { font-size:2.6mm; color:#334155; display:flex; flex-wrap:wrap; gap:0 2mm; }
-  .et .info .rw span b { color:#0f172a; font-weight:600; }
-  .et .info .cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; margin-top:.6mm; }
+  .et .info .topline { display:flex; justify-content:space-between; align-items:flex-start; gap:2mm; }
+  .et .info .nm  { font-size:3.3mm; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .et .info .cr  { font-size:2.8mm; color:#334155; margin-top:.8mm; }
+  .et .info .cr b { color:#0f172a; font-weight:600; }
+  .et .info .cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; margin-top:.8mm; }
+
+  /* DESTRA: taglia grande */
+  .et .taglia {
+    flex:0 0 auto; text-align:center; line-height:1;
+    border:1px solid #0f172a; border-radius:1.5mm;
+    padding:1mm 1.6mm; min-width:11mm;
+  }
+  .et .taglia .lbl { font-size:2mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
+  .et .taglia .val { font-size:6mm; font-weight:800; }
+
+  /* LOGO */
+  .et .logo { flex:0 0 auto; display:flex; align-items:center; }
+  .et .logo img { display:block; object-fit:contain; }
 
   @media print {
     #toolbar, #drop { display:none !important; }
@@ -110,15 +129,17 @@
   </div>
   <span class="chk"><input type="checkbox" id="fQr" checked> QR</span>
   <span class="chk"><input type="checkbox" id="fBc" checked> Barcode</span>
-  <span class="chk"><input type="checkbox" id="fAz" checked> Azienda</span>
   <span class="chk"><input type="checkbox" id="fNm" checked> Nome</span>
+  <span class="chk"><input type="checkbox" id="fCli" checked> Cliente</span>
   <span class="chk"><input type="checkbox" id="fRep" checked> Reparto</span>
-  <span class="chk"><input type="checkbox" id="fTip" checked> Tipo</span>
   <span class="chk"><input type="checkbox" id="fTag" checked> Taglia</span>
-  <span class="chk"><input type="checkbox" id="fData" checked> Data</span>
+  <span class="chk"><input type="checkbox" id="fLogo" checked> Logo</span>
+  <button class="imgbtn" id="btnImg">🖼️ Immagine</button>
+  <span id="logoName"></span>
   <button id="btnPrint">🖨️ Stampa</button>
   <button class="ghost" id="btnNew">📂 Altro CSV</button>
   <span id="count"></span>
+  <input type="file" id="imgInput" accept="image/*" style="display:none">
 </div>
 
 <div id="drop">
@@ -133,11 +154,11 @@
 <script>
 // ---------- stato ----------
 var ROWS = [];
+var LOGO = '';   // data URL dell'immagine/logo
 
 // ---------- CSV parser ----------
 function parseCSV(text){
   if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
-  // auto-detect delimitatore sulla prima riga
   var firstLine = text.split(/\r?\n/)[0] || '';
   var delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
   var rows = [], cur = [], field = '', inQ = false;
@@ -157,12 +178,11 @@ function parseCSV(text){
     }
   }
   if(field.length || cur.length){ cur.push(field); rows.push(cur); }
-  // header -> oggetti
   if(!rows.length) return [];
   var head = rows[0].map(function(h){ return (h||'').trim(); });
   var out = [];
   for(var r=1;r<rows.length;r++){
-    if(rows[r].length === 1 && rows[r][0].trim() === '') continue; // riga vuota
+    if(rows[r].length === 1 && rows[r][0].trim() === '') continue;
     var obj = {};
     for(var c=0;c<head.length;c++){ obj[head[c]] = (rows[r][c]||'').trim(); }
     out.push(obj);
@@ -170,17 +190,14 @@ function parseCSV(text){
   return out;
 }
 
-// prende un valore per nome colonna (case-insensitive, match parziale)
 function get(row, names){
   if(typeof names === 'string') names = [names];
   var keys = Object.keys(row);
   for(var n=0;n<names.length;n++){
     var want = names[n].toLowerCase();
-    // match esatto
     for(var k=0;k<keys.length;k++){
       if(keys[k].toLowerCase() === want) return row[keys[k]];
     }
-    // match parziale
     for(var k2=0;k2<keys.length;k2++){
       if(keys[k2].toLowerCase().indexOf(want) !== -1) return row[keys[k2]];
     }
@@ -200,20 +217,16 @@ function render(){
 
   var showQr  = document.getElementById('fQr').checked;
   var showBc  = document.getElementById('fBc').checked;
-  var showAz  = document.getElementById('fAz').checked;
   var showNm  = document.getElementById('fNm').checked;
+  var showCli = document.getElementById('fCli').checked;
   var showRep = document.getElementById('fRep').checked;
-  var showTip = document.getElementById('fTip').checked;
   var showTag = document.getElementById('fTag').checked;
-  var showData= document.getElementById('fData').checked;
+  var showLogo= document.getElementById('fLogo').checked && LOGO;
 
-  // larghezza utile: A4 210mm - margini 12mm, meno gap
   var largMm = ((210 - 12) / perRiga) - 3;
-  // quante righe per foglio: area utile verticale 297 - 16mm margini
   var perColonna = Math.max(1, Math.floor((297 - 16) / (hmm + 3)));
   var perFoglio = perRiga * perColonna;
 
-  // espandi copie
   var items = [];
   for(var i=0;i<ROWS.length;i++){
     for(var c=0;c<copie;c++) items.push(ROWS[i]);
@@ -232,19 +245,16 @@ function render(){
     var row = items[idx];
 
     var codice  = get(row, ['CODICE','codice','barcode','matricola']);
-    var azienda = get(row, ['AZIENDA','azienda','cliente']);
     var nome    = get(row, ['NOME E COGNOME','nome e cognome','nome','cognome']);
+    var cliente = get(row, ['AZIENDA','azienda','cliente']);
     var reparto = get(row, ['REPARTO','reparto']);
-    var tipo    = get(row, ['TIPO','tipo','descrizione']);
     var taglia  = get(row, ['TAGLIA','taglia','size']);
-    var data    = get(row, ['DATA','data']);
-    var armadio = get(row, ['ARMADIO','armadio','posizione']);
 
     var et = document.createElement('div');
     et.className = 'et';
     et.style.height = hmm + 'mm';
 
-    // --- codici (QR + barcode) ---
+    // --- SINISTRA: codice (QR + barcode) ---
     var codesDiv = document.createElement('div');
     codesDiv.className = 'codes';
 
@@ -255,7 +265,7 @@ function render(){
         var qr = qrcode(0, 'M');
         qr.addData(codice);
         qr.make();
-        var qrSize = Math.max(10, Math.min(hmm - 12, 22)); // mm
+        var qrSize = Math.max(10, Math.min(hmm - 12, 22));
         qrWrap.innerHTML = qr.createSvgTag({ cellSize:2, margin:0, scalable:true });
         var qsvg = qrWrap.querySelector('svg');
         if(qsvg){ qsvg.style.width = qrSize+'mm'; qsvg.style.height = qrSize+'mm'; }
@@ -272,32 +282,58 @@ function render(){
         JsBarcode(bsvg, String(codice), {
           format:'CODE128', displayValue:false, height:34, margin:0, width:1.4
         });
-        bsvg.style.width = Math.min(largMm*0.9, 36) + 'mm';
-        bsvg.style.height = '9mm';
+        bsvg.style.width = Math.min(largMm*0.45, 34) + 'mm';
+        bsvg.style.height = '8mm';
       }catch(e){}
       codesDiv.appendChild(bcWrap);
     }
 
     if(codesDiv.childNodes.length) et.appendChild(codesDiv);
 
-    // --- info ---
+    // --- CENTRO: info (nome -> cliente/reparto -> codice) ---
     var info = document.createElement('div');
     info.className = 'info';
+
+    // riga alta: nome a sx, taglia a dx
+    var top = document.createElement('div');
+    top.className = 'topline';
+
+    var leftCol = document.createElement('div');
+    leftCol.style.minWidth = '0';
+    leftCol.style.flex = '1 1 auto';
     var html = '';
-    if(showAz && azienda) html += '<div class="az">'+esc(azienda)+'</div>';
-    if(showNm && nome)    html += '<div class="nm">'+esc(nome)+'</div>';
-
-    var rw = [];
-    if(showRep && reparto) rw.push('<span><b>Reparto:</b> '+esc(reparto)+'</span>');
-    if(showTip && tipo)    rw.push('<span><b>Tipo:</b> '+esc(tipo)+'</span>');
-    if(showTag && taglia)  rw.push('<span><b>Taglia:</b> '+esc(taglia)+'</span>');
-    if(showData && data)   rw.push('<span><b>Data:</b> '+esc(data)+'</span>');
-    if(armadio)            rw.push('<span><b>Arm.:</b> '+esc(armadio)+'</span>');
-    if(rw.length) html += '<div class="rw">'+rw.join('')+'</div>';
-
+    if(showNm && nome) html += '<div class="nm">'+esc(nome)+'</div>';
+    var cr = [];
+    if(showCli && cliente) cr.push('<b>'+esc(cliente)+'</b>');
+    if(showRep && reparto) cr.push(esc(reparto));
+    if(cr.length) html += '<div class="cr">'+cr.join(' · ')+'</div>';
     if(codice) html += '<div class="cod">'+esc(codice)+'</div>';
-    info.innerHTML = html;
+    leftCol.innerHTML = html;
+    top.appendChild(leftCol);
+
+    // DESTRA: taglia
+    if(showTag && taglia){
+      var tg = document.createElement('div');
+      tg.className = 'taglia';
+      tg.innerHTML = '<div class="lbl">Taglia</div><div class="val">'+esc(taglia)+'</div>';
+      top.appendChild(tg);
+    }
+
+    info.appendChild(top);
     et.appendChild(info);
+
+    // LOGO (immagine) in alto a destra
+    if(showLogo){
+      var lg = document.createElement('div');
+      lg.className = 'logo';
+      var img = document.createElement('img');
+      img.src = LOGO;
+      var logoH = Math.min(hmm - 8, 16);
+      img.style.maxHeight = logoH + 'mm';
+      img.style.maxWidth = '22mm';
+      lg.appendChild(img);
+      et.appendChild(lg);
+    }
 
     foglio.appendChild(et);
   }
@@ -325,12 +361,28 @@ function handleFile(f){
   reader.readAsText(f, 'UTF-8');
 }
 
+function handleImg(f){
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    LOGO = e.target.result;
+    document.getElementById('logoName').textContent = f.name;
+    document.getElementById('fLogo').checked = true;
+    render();
+  };
+  reader.readAsDataURL(f);
+}
+
 // ---------- eventi ----------
 var drop = document.getElementById('drop');
 var fileInput = document.getElementById('file');
+var imgInput = document.getElementById('imgInput');
 
 drop.addEventListener('click', function(){ fileInput.click(); });
 fileInput.addEventListener('change', function(){ handleFile(this.files[0]); });
+
+document.getElementById('btnImg').addEventListener('click', function(){ imgInput.click(); });
+imgInput.addEventListener('change', function(){ handleImg(this.files[0]); });
 
 drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('hover'); });
 drop.addEventListener('dragleave', function(){ drop.classList.remove('hover'); });
@@ -338,14 +390,13 @@ drop.addEventListener('drop', function(e){
   e.preventDefault(); drop.classList.remove('hover');
   if(e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
 });
-// drag su tutta la pagina
 window.addEventListener('dragover', function(e){ e.preventDefault(); });
 window.addEventListener('drop', function(e){
   e.preventDefault();
   if(e.dataTransfer.files && e.dataTransfer.files.length && !ROWS.length) handleFile(e.dataTransfer.files[0]);
 });
 
-['perRiga','hmm','copie','fQr','fBc','fAz','fNm','fRep','fTip','fTag','fData'].forEach(function(id){
+['perRiga','hmm','copie','fQr','fBc','fNm','fCli','fRep','fTag','fLogo'].forEach(function(id){
   document.getElementById(id).addEventListener('change', render);
 });
 
