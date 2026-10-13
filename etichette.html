@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mycroclean – Stampa Etichette</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #f3f4f6;
+    color: #111;
+  }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar {
+    position: sticky; top: 0; z-index: 50;
+    background: #0f172a; color: #fff;
+    padding: 12px 18px;
+    display: flex; flex-wrap: wrap; gap: 14px 22px;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  #toolbar h1 { font-size: 16px; margin: 0 10px 0 0; font-weight: 700; letter-spacing:.3px; }
+  #toolbar .grp { display:flex; align-items:center; gap:6px; font-size:13px; }
+  #toolbar label { font-size:13px; }
+  #toolbar select, #toolbar input[type=number] {
+    background:#1e293b; color:#fff; border:1px solid #334155;
+    border-radius:6px; padding:4px 6px; font-size:13px;
+  }
+  #toolbar input[type=number] { width:60px; }
+  #toolbar .chk { display:flex; align-items:center; gap:4px; font-size:12px; background:#1e293b; padding:3px 8px; border-radius:6px; }
+  #toolbar button {
+    background:#2563eb; color:#fff; border:none; border-radius:6px;
+    padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  #toolbar button:hover { background:#1d4ed8; }
+  #toolbar button.ghost { background:#334155; }
+  #toolbar button.ghost:hover { background:#475569; }
+  #count { font-size:12px; opacity:.8; }
+
+  /* ---------- Drop zone ---------- */
+  #drop {
+    margin: 28px auto; max-width: 640px;
+    border: 3px dashed #94a3b8; border-radius: 14px;
+    background:#fff; padding: 46px 24px; text-align:center;
+    color:#475569; cursor:pointer; transition:.15s;
+  }
+  #drop.hover { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
+  #drop b { color:#0f172a; }
+  #drop .big { font-size:17px; margin-bottom:8px; }
+  #drop .small { font-size:13px; opacity:.8; margin-top:10px; }
+
+  /* ---------- Fogli ---------- */
+  #out { padding: 10px 0 60px; }
+  .foglio {
+    background:#fff; width:210mm; min-height:297mm;
+    margin: 0 auto 16px; padding: 8mm 6mm;
+    display:grid; gap:3mm; align-content:start;
+    box-shadow: 0 3px 14px rgba(0,0,0,.12);
+  }
+  .et {
+    border:1px solid #cbd5e1; border-radius:2mm;
+    padding:2mm 2.5mm; display:flex; gap:2.5mm;
+    align-items:center; overflow:hidden;
+    page-break-inside:avoid; break-inside:avoid;
+  }
+  .et .codes { display:flex; flex-direction:column; align-items:center; gap:1mm; flex:0 0 auto; }
+  .et .qr svg { display:block; }
+  .et .bc svg  { display:block; }
+  .et .info { flex:1 1 auto; min-width:0; line-height:1.2; }
+  .et .info .az { font-weight:700; font-size:3.4mm; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .et .info .nm { font-size:3.1mm; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .et .info .rw { font-size:2.6mm; color:#334155; display:flex; flex-wrap:wrap; gap:0 2mm; }
+  .et .info .rw span b { color:#0f172a; font-weight:600; }
+  .et .info .cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; margin-top:.6mm; }
+
+  @media print {
+    #toolbar, #drop { display:none !important; }
+    body { background:#fff; }
+    #out { padding:0; }
+    .foglio { box-shadow:none; margin:0; width:auto; min-height:auto; padding:8mm 6mm; }
+    .foglio + .foglio { page-break-before:always; }
+    @page { size:A4; margin:0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>🏷️ Etichette Mycroclean</h1>
+  <div class="grp">
+    <label>Per riga</label>
+    <select id="perRiga">
+      <option value="2">2</option>
+      <option value="3" selected>3</option>
+      <option value="4">4</option>
+    </select>
+  </div>
+  <div class="grp">
+    <label>Altezza mm</label>
+    <input type="number" id="hmm" value="40" min="22" max="120">
+  </div>
+  <div class="grp">
+    <label>Copie/capo</label>
+    <input type="number" id="copie" value="1" min="1" max="50">
+  </div>
+  <span class="chk"><input type="checkbox" id="fQr" checked> QR</span>
+  <span class="chk"><input type="checkbox" id="fBc" checked> Barcode</span>
+  <span class="chk"><input type="checkbox" id="fAz" checked> Azienda</span>
+  <span class="chk"><input type="checkbox" id="fNm" checked> Nome</span>
+  <span class="chk"><input type="checkbox" id="fRep" checked> Reparto</span>
+  <span class="chk"><input type="checkbox" id="fTip" checked> Tipo</span>
+  <span class="chk"><input type="checkbox" id="fTag" checked> Taglia</span>
+  <span class="chk"><input type="checkbox" id="fData" checked> Data</span>
+  <button id="btnPrint">🖨️ Stampa</button>
+  <button class="ghost" id="btnNew">📂 Altro CSV</button>
+  <span id="count"></span>
+</div>
+
+<div id="drop">
+  <div class="big">Trascina qui il <b>file CSV</b> esportato da next.mycroclean.com</div>
+  <div>oppure clicca per selezionarlo</div>
+  <div class="small">Il file resta sul tuo computer: nessun caricamento, nessuna password.</div>
+  <input type="file" id="file" accept=".csv,text/csv" style="display:none">
+</div>
+
+<div id="out"></div>
+
+<script>
+// ---------- stato ----------
+var ROWS = [];
+
+// ---------- CSV parser ----------
+function parseCSV(text){
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
+  // auto-detect delimitatore sulla prima riga
+  var firstLine = text.split(/\r?\n/)[0] || '';
+  var delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  var rows = [], cur = [], field = '', inQ = false;
+  for(var i=0;i<text.length;i++){
+    var ch = text[i];
+    if(inQ){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQ = false;
+      } else field += ch;
+    } else {
+      if(ch === '"') inQ = true;
+      else if(ch === delim){ cur.push(field); field=''; }
+      else if(ch === '\n'){ cur.push(field); rows.push(cur); cur=[]; field=''; }
+      else if(ch === '\r'){ /* skip */ }
+      else field += ch;
+    }
+  }
+  if(field.length || cur.length){ cur.push(field); rows.push(cur); }
+  // header -> oggetti
+  if(!rows.length) return [];
+  var head = rows[0].map(function(h){ return (h||'').trim(); });
+  var out = [];
+  for(var r=1;r<rows.length;r++){
+    if(rows[r].length === 1 && rows[r][0].trim() === '') continue; // riga vuota
+    var obj = {};
+    for(var c=0;c<head.length;c++){ obj[head[c]] = (rows[r][c]||'').trim(); }
+    out.push(obj);
+  }
+  return out;
+}
+
+// prende un valore per nome colonna (case-insensitive, match parziale)
+function get(row, names){
+  if(typeof names === 'string') names = [names];
+  var keys = Object.keys(row);
+  for(var n=0;n<names.length;n++){
+    var want = names[n].toLowerCase();
+    // match esatto
+    for(var k=0;k<keys.length;k++){
+      if(keys[k].toLowerCase() === want) return row[keys[k]];
+    }
+    // match parziale
+    for(var k2=0;k2<keys.length;k2++){
+      if(keys[k2].toLowerCase().indexOf(want) !== -1) return row[keys[k2]];
+    }
+  }
+  return '';
+}
+
+// ---------- render ----------
+function render(){
+  var out = document.getElementById('out');
+  out.innerHTML = '';
+  if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
+
+  var perRiga = parseInt(document.getElementById('perRiga').value,10) || 3;
+  var hmm     = parseInt(document.getElementById('hmm').value,10) || 40;
+  var copie   = parseInt(document.getElementById('copie').value,10) || 1;
+
+  var showQr  = document.getElementById('fQr').checked;
+  var showBc  = document.getElementById('fBc').checked;
+  var showAz  = document.getElementById('fAz').checked;
+  var showNm  = document.getElementById('fNm').checked;
+  var showRep = document.getElementById('fRep').checked;
+  var showTip = document.getElementById('fTip').checked;
+  var showTag = document.getElementById('fTag').checked;
+  var showData= document.getElementById('fData').checked;
+
+  // larghezza utile: A4 210mm - margini 12mm, meno gap
+  var largMm = ((210 - 12) / perRiga) - 3;
+  // quante righe per foglio: area utile verticale 297 - 16mm margini
+  var perColonna = Math.max(1, Math.floor((297 - 16) / (hmm + 3)));
+  var perFoglio = perRiga * perColonna;
+
+  // espandi copie
+  var items = [];
+  for(var i=0;i<ROWS.length;i++){
+    for(var c=0;c<copie;c++) items.push(ROWS[i]);
+  }
+
+  var totEt = items.length;
+  var foglio = null;
+
+  for(var idx=0; idx<items.length; idx++){
+    if(idx % perFoglio === 0){
+      foglio = document.createElement('div');
+      foglio.className = 'foglio';
+      foglio.style.gridTemplateColumns = 'repeat(' + perRiga + ', ' + largMm + 'mm)';
+      out.appendChild(foglio);
+    }
+    var row = items[idx];
+
+    var codice  = get(row, ['CODICE','codice','barcode','matricola']);
+    var azienda = get(row, ['AZIENDA','azienda','cliente']);
+    var nome    = get(row, ['NOME E COGNOME','nome e cognome','nome','cognome']);
+    var reparto = get(row, ['REPARTO','reparto']);
+    var tipo    = get(row, ['TIPO','tipo','descrizione']);
+    var taglia  = get(row, ['TAGLIA','taglia','size']);
+    var data    = get(row, ['DATA','data']);
+    var armadio = get(row, ['ARMADIO','armadio','posizione']);
+
+    var et = document.createElement('div');
+    et.className = 'et';
+    et.style.height = hmm + 'mm';
+
+    // --- codici (QR + barcode) ---
+    var codesDiv = document.createElement('div');
+    codesDiv.className = 'codes';
+
+    if(showQr && codice){
+      var qrWrap = document.createElement('div');
+      qrWrap.className = 'qr';
+      try{
+        var qr = qrcode(0, 'M');
+        qr.addData(codice);
+        qr.make();
+        var qrSize = Math.max(10, Math.min(hmm - 12, 22)); // mm
+        qrWrap.innerHTML = qr.createSvgTag({ cellSize:2, margin:0, scalable:true });
+        var qsvg = qrWrap.querySelector('svg');
+        if(qsvg){ qsvg.style.width = qrSize+'mm'; qsvg.style.height = qrSize+'mm'; }
+      }catch(e){}
+      codesDiv.appendChild(qrWrap);
+    }
+
+    if(showBc && codice){
+      var bcWrap = document.createElement('div');
+      bcWrap.className = 'bc';
+      var bsvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      bcWrap.appendChild(bsvg);
+      try{
+        JsBarcode(bsvg, String(codice), {
+          format:'CODE128', displayValue:false, height:34, margin:0, width:1.4
+        });
+        bsvg.style.width = Math.min(largMm*0.9, 36) + 'mm';
+        bsvg.style.height = '9mm';
+      }catch(e){}
+      codesDiv.appendChild(bcWrap);
+    }
+
+    if(codesDiv.childNodes.length) et.appendChild(codesDiv);
+
+    // --- info ---
+    var info = document.createElement('div');
+    info.className = 'info';
+    var html = '';
+    if(showAz && azienda) html += '<div class="az">'+esc(azienda)+'</div>';
+    if(showNm && nome)    html += '<div class="nm">'+esc(nome)+'</div>';
+
+    var rw = [];
+    if(showRep && reparto) rw.push('<span><b>Reparto:</b> '+esc(reparto)+'</span>');
+    if(showTip && tipo)    rw.push('<span><b>Tipo:</b> '+esc(tipo)+'</span>');
+    if(showTag && taglia)  rw.push('<span><b>Taglia:</b> '+esc(taglia)+'</span>');
+    if(showData && data)   rw.push('<span><b>Data:</b> '+esc(data)+'</span>');
+    if(armadio)            rw.push('<span><b>Arm.:</b> '+esc(armadio)+'</span>');
+    if(rw.length) html += '<div class="rw">'+rw.join('')+'</div>';
+
+    if(codice) html += '<div class="cod">'+esc(codice)+'</div>';
+    info.innerHTML = html;
+    et.appendChild(info);
+
+    foglio.appendChild(et);
+  }
+
+  document.getElementById('count').textContent =
+    totEt + ' etichette · ' + out.childNodes.length + ' foglio/i';
+}
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+
+// ---------- file handling ----------
+function handleFile(f){
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    ROWS = parseCSV(e.target.result);
+    document.getElementById('drop').style.display = ROWS.length ? 'none' : 'block';
+    render();
+    if(!ROWS.length) alert('Nessuna riga trovata nel CSV. Controlla il file.');
+  };
+  reader.readAsText(f, 'UTF-8');
+}
+
+// ---------- eventi ----------
+var drop = document.getElementById('drop');
+var fileInput = document.getElementById('file');
+
+drop.addEventListener('click', function(){ fileInput.click(); });
+fileInput.addEventListener('change', function(){ handleFile(this.files[0]); });
+
+drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('hover'); });
+drop.addEventListener('dragleave', function(){ drop.classList.remove('hover'); });
+drop.addEventListener('drop', function(e){
+  e.preventDefault(); drop.classList.remove('hover');
+  if(e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+// drag su tutta la pagina
+window.addEventListener('dragover', function(e){ e.preventDefault(); });
+window.addEventListener('drop', function(e){
+  e.preventDefault();
+  if(e.dataTransfer.files && e.dataTransfer.files.length && !ROWS.length) handleFile(e.dataTransfer.files[0]);
+});
+
+['perRiga','hmm','copie','fQr','fBc','fAz','fNm','fRep','fTip','fTag','fData'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', render);
+});
+
+document.getElementById('btnPrint').addEventListener('click', function(){ window.print(); });
+document.getElementById('btnNew').addEventListener('click', function(){
+  ROWS = []; fileInput.value = '';
+  document.getElementById('drop').style.display = 'block';
+  render();
+});
+</script>
+</body>
+</html>
