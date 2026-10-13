@@ -131,7 +131,7 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde). La disposizione si applica a tutte e viene salvata.
+  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde). La disposizione si applica a tutte e viene salvata. <i>(Nella ristampa PDF il testo del PDF è fisso: puoi spostare solo il logo/immagine che aggiungi.)</i>
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
@@ -406,13 +406,26 @@ function render(){
   else renderA4(out, items);
 }
 
-// ---- ristampa PDF come immagini ----
-function imgLabel(src, hmm){
+// ---- ristampa PDF come immagini (con logo sovrapponibile) ----
+function imgLabel(src, hmm, largMm){
   var et=document.createElement('div'); et.className='et'; et.style.height=hmm+'mm';
-  et.style.display='flex'; et.style.alignItems='center'; et.style.justifyContent='center';
+  // sfondo = pagina PDF, centrata
+  var bgwrap=document.createElement('div');
+  bgwrap.style.position='absolute'; bgwrap.style.inset='0';
+  bgwrap.style.display='flex'; bgwrap.style.alignItems='center'; bgwrap.style.justifyContent='center';
   var img=document.createElement('img'); img.src=src;
   img.style.maxWidth='100%'; img.style.maxHeight='100%'; img.style.objectFit='contain';
-  et.appendChild(img); return et;
+  bgwrap.appendChild(img); et.appendChild(bgwrap);
+  // logo sovrapposto (spostabile)
+  var lcb=document.getElementById('f_logo');
+  if(LOGO && lcb && lcb.checked){
+    var lg=document.createElement('div'); lg.className='el logo'; lg.dataset.key='logo';
+    lg.style.left=LAYOUT.logo.x+'%'; lg.style.top=LAYOUT.logo.y+'%';
+    var limg=document.createElement('img'); limg.src=LOGO;
+    limg.style.maxHeight=Math.min(hmm/2,16)+'mm'; limg.style.maxWidth='22mm';
+    lg.appendChild(limg); et.appendChild(lg);
+  }
+  return et;
 }
 function renderImagesA4(out, imgs){
   var perRiga=parseInt(document.getElementById('perRiga').value,10)||3;
@@ -424,7 +437,9 @@ function renderImagesA4(out, imgs){
   for(var idx=0;idx<imgs.length;idx++){
     if(idx%perFoglio===0){ foglio=document.createElement('div'); foglio.className='foglio';
       foglio.style.gridTemplateColumns='repeat('+perRiga+', '+largMm+'mm)'; out.appendChild(foglio); }
-    foglio.appendChild(imgLabel(imgs[idx],hmm));
+    var et=imgLabel(imgs[idx],hmm,largMm);
+    if(EDIT && idx===0){ et.classList.add('editable'); makeDraggable(et); }
+    foglio.appendChild(et);
   }
   document.getElementById('count').textContent='ristampa PDF · '+imgs.length+' etichette · '+out.childNodes.length+' foglio/i';
 }
@@ -436,7 +451,9 @@ function renderImagesRotolo(out, imgs){
   for(var idx=0;idx<imgs.length;idx++){
     var wrap=document.createElement('div'); wrap.className='rotolo';
     wrap.style.width=W+'mm'; wrap.style.height=H+'mm';
-    wrap.appendChild(imgLabel(imgs[idx],H)); out.appendChild(wrap);
+    var et=imgLabel(imgs[idx],H,W);
+    if(EDIT && idx===0){ et.classList.add('editable'); makeDraggable(et); }
+    wrap.appendChild(et); out.appendChild(wrap);
   }
   document.getElementById('count').textContent='ristampa PDF · '+imgs.length+' etichette · rotolo '+W+'×'+H+' mm';
 }
