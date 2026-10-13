@@ -104,23 +104,41 @@
   .et.editable .el:hover { outline-color:#16a34a; background:rgba(22,163,74,.06); }
   .et.editable .el.dragging { outline:2px solid #16a34a; background:rgba(22,163,74,.12); z-index:30; }
 
+  /* ---------- Rotolo termico (una etichetta per pagina) ---------- */
+  .rotolo {
+    background:#fff; margin:0 auto 10px;
+    box-shadow:0 3px 14px rgba(0,0,0,.12);
+  }
+  .rotolo .et { width:100%; height:100%; border:1px solid #cbd5e1; border-radius:0; }
+
   @media print {
     #toolbar, #editbar, #drop { display:none !important; }
     body { background:#fff; }
     #out { padding:0; }
+    /* A4 */
     .foglio { box-shadow:none; margin:0; width:auto; min-height:auto; padding:8mm 6mm; }
     .foglio + .foglio { page-break-before:always; }
+    /* Rotolo */
+    .rotolo { box-shadow:none; margin:0; page-break-after:always; break-after:page; }
+    .rotolo .et { border:none; }
     .et.editable { outline:none; }
     .et.editable .el { outline:none !important; background:none !important; }
-    @page { size:A4; margin:0; }
   }
 </style>
+<style id="pageStyle">@page { size:A4; margin:0; }</style>
 </head>
 <body>
 
 <div id="toolbar">
   <h1>🏷️ Etichette Mycroclean</h1>
   <div class="grp">
+    <label>Formato</label>
+    <select id="formato">
+      <option value="a4" selected>A4 (foglio)</option>
+      <option value="rotolo">Rotolo termico</option>
+    </select>
+  </div>
+  <div class="grp a4only">
     <label>Per riga</label>
     <select id="perRiga">
       <option value="2">2</option>
@@ -128,9 +146,19 @@
       <option value="4">4</option>
     </select>
   </div>
-  <div class="grp">
+  <div class="grp a4only">
     <label>Altezza mm</label>
     <input type="number" id="hmm" value="40" min="22" max="120">
+  </div>
+  <div class="grp rollonly" style="display:none">
+    <label>Etichetta L×A mm</label>
+    <input type="number" id="rollW" value="60" min="20" max="200" title="Larghezza etichetta">
+    <span>×</span>
+    <input type="number" id="rollH" value="40" min="15" max="200" title="Altezza etichetta">
+  </div>
+  <div class="grp rollonly" style="display:none">
+    <label>Gap mm</label>
+    <input type="number" id="rollGap" value="2" min="0" max="20" title="Spazio tra etichette (vuoto tra una e l'altra sul rotolo)">
   </div>
   <div class="grp">
     <label>Copie/capo</label>
@@ -336,15 +364,14 @@ function buildLabel(row, hmm, largMm, flags){
   return et;
 }
 
-// ---------- render tutti i fogli ----------
+// ---------- render ----------
 function render(){
   var out = document.getElementById('out');
   out.innerHTML = '';
   if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
 
-  var perRiga = parseInt(document.getElementById('perRiga').value,10) || 3;
-  var hmm     = parseInt(document.getElementById('hmm').value,10) || 40;
-  var copie   = parseInt(document.getElementById('copie').value,10) || 1;
+  var copie = parseInt(document.getElementById('copie').value,10) || 1;
+  var formato = document.getElementById('formato').value;
 
   var flags = {
     qr: document.getElementById('fQr').checked,
@@ -356,12 +383,26 @@ function render(){
     logo:document.getElementById('fLogo').checked && !!LOGO
   };
 
+  var items = [];
+  for(var i=0;i<ROWS.length;i++){ for(var c=0;c<copie;c++) items.push(ROWS[i]); }
+
+  if(formato === 'rotolo'){
+    renderRotolo(out, items, flags);
+  } else {
+    renderA4(out, items, flags);
+  }
+}
+
+function renderA4(out, items, flags){
+  var perRiga = parseInt(document.getElementById('perRiga').value,10) || 3;
+  var hmm     = parseInt(document.getElementById('hmm').value,10) || 40;
+
+  // @page A4
+  document.getElementById('pageStyle').textContent = '@page { size:A4; margin:0; }';
+
   var largMm = ((210 - 12) / perRiga) - 3;
   var perColonna = Math.max(1, Math.floor((297 - 16) / (hmm + 3)));
   var perFoglio = perRiga * perColonna;
-
-  var items = [];
-  for(var i=0;i<ROWS.length;i++){ for(var c=0;c<copie;c++) items.push(ROWS[i]); }
 
   var foglio = null;
   for(var idx=0; idx<items.length; idx++){
@@ -375,9 +416,37 @@ function render(){
     if(EDIT && idx === 0){ et.classList.add('editable'); makeDraggable(et); }
     foglio.appendChild(et);
   }
-
   document.getElementById('count').textContent =
     items.length + ' etichette · ' + out.childNodes.length + ' foglio/i';
+}
+
+function renderRotolo(out, items, flags){
+  var W = parseInt(document.getElementById('rollW').value,10) || 60;
+  var H = parseInt(document.getElementById('rollH').value,10) || 40;
+  var gap = parseInt(document.getElementById('rollGap').value,10); if(isNaN(gap)) gap = 0;
+
+  // @page = misura esatta etichetta + gap (il gap fa avanzare la carta tra una etichetta e l'altra)
+  document.getElementById('pageStyle').textContent =
+    '@page { size:' + W + 'mm ' + (H + gap) + 'mm; margin:0; }';
+
+  for(var idx=0; idx<items.length; idx++){
+    var wrap = document.createElement('div');
+    wrap.className = 'rotolo';
+    wrap.style.width  = W + 'mm';
+    wrap.style.height = H + 'mm';
+    var et = buildLabel(items[idx], H, W, flags);
+    if(EDIT && idx === 0){ et.classList.add('editable'); makeDraggable(et); }
+    wrap.appendChild(et);
+    out.appendChild(wrap);
+  }
+  document.getElementById('count').textContent =
+    items.length + ' etichette · rotolo ' + W + '×' + H + ' mm';
+}
+
+function updateFormatoUI(){
+  var roll = document.getElementById('formato').value === 'rotolo';
+  document.querySelectorAll('.a4only').forEach(function(e){ e.style.display = roll ? 'none' : ''; });
+  document.querySelectorAll('.rollonly').forEach(function(e){ e.style.display = roll ? '' : 'none'; });
 }
 
 // ---------- drag & drop nella prima etichetta ----------
@@ -473,9 +542,13 @@ window.addEventListener('drop', function(e){
   if(e.dataTransfer.files && e.dataTransfer.files.length && !ROWS.length) handleFile(e.dataTransfer.files[0]);
 });
 
-['perRiga','hmm','copie','fQr','fBc','fNm','fCli','fRep','fTag','fLogo'].forEach(function(id){
+['perRiga','hmm','copie','rollW','rollH','rollGap','fQr','fBc','fNm','fCli','fRep','fTag','fLogo'].forEach(function(id){
   document.getElementById(id).addEventListener('change', render);
 });
+document.getElementById('formato').addEventListener('change', function(){
+  updateFormatoUI(); render();
+});
+updateFormatoUI();
 
 document.getElementById('btnEdit').addEventListener('click', function(){
   EDIT = !EDIT;
