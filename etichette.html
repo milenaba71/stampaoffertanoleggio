@@ -63,6 +63,7 @@
   .el.txt .k { color:#64748b; font-weight:600; }
   .el[contenteditable="true"]{ outline:1px dashed #2563eb; cursor:text; }
   .rzh { position:absolute; right:-4px; bottom:-4px; width:10px; height:10px; background:#16a34a; border:1px solid #fff; border-radius:2px; cursor:nwse-resize; z-index:40; }
+  .ftdel { position:absolute; left:-7px; top:-7px; width:15px; height:15px; background:#dc2626; color:#fff; border:1px solid #fff; border-radius:50%; font-size:10px; line-height:13px; text-align:center; cursor:pointer; z-index:41; font-family:Arial; }
   .el.taglia { text-align:center; line-height:1; border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm; }
   .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
   .el.taglia .val { font-size:5.2mm; font-weight:800; }
@@ -87,6 +88,7 @@
     .et.editable { outline:none; }
     .et.editable .el { outline:none !important; background:none !important; }
     .rzh { display:none !important; }
+    .ftdel { display:none !important; }
   }
 </style>
 <style id="pageStyle">@page { size:A4; margin:0; }</style>
@@ -130,6 +132,12 @@
   <span id="logoName"></span>
   <button class="editbtn" id="btnEdit">✏️ Sposta/ridimensiona</button>
   <button class="ghost" id="btnData">📝 Dati</button>
+  <div class="grp">
+    <label>Layout</label>
+    <select id="presetSel" title="Layout salvati"><option value="">— layout —</option></select>
+    <button class="ghost" id="btnSavePreset" title="Salva il layout attuale">💾</button>
+    <button class="ghost" id="btnDelPreset" title="Elimina il layout selezionato">🗑</button>
+  </div>
   <button id="btnPrint">🖨️ Stampa</button>
   <button class="ghost" id="btnNew">📂 Altro file</button>
   <span id="count"></span>
@@ -137,7 +145,7 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. I <b>testi liberi</b> si modificano/eliminano con <b>doppio click</b>. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
+  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. I <b>testi liberi</b> si correggono con <b>doppio click</b> e si eliminano con la <b>✕ rossa</b> in alto a sinistra. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
@@ -216,6 +224,50 @@ var FREETEXTS = loadFT();
 function loadFT(){ try{ var s=localStorage.getItem(FT_KEY); if(s) return JSON.parse(s)||[]; }catch(e){} return []; }
 function saveFT(){ try{ localStorage.setItem(FT_KEY, JSON.stringify(FREETEXTS)); }catch(e){} }
 function ftById(key){ for(var i=0;i<FREETEXTS.length;i++){ if('ft_'+FREETEXTS[i].id===key) return FREETEXTS[i]; } return null; }
+
+// ===== layout salvati (preset) =====
+var PRESETS_KEY = 'myc_etichetta_presets_v1';
+function loadPresets(){ try{ var s=localStorage.getItem(PRESETS_KEY); if(s) return JSON.parse(s)||{}; }catch(e){} return {}; }
+function savePresets(p){ try{ localStorage.setItem(PRESETS_KEY, JSON.stringify(p)); return true; }
+  catch(e){ alert('Spazio insufficiente per salvare il layout (il logo potrebbe essere troppo grande).'); return false; } }
+function gatherFields(){ var o={}; FIELDS.forEach(function(f){ var cb=document.getElementById('f_'+f.key); o[f.key]=cb?cb.checked:false; }); return o; }
+function currentPreset(){
+  return {
+    layout: JSON.parse(JSON.stringify(LAYOUT)),
+    freetexts: JSON.parse(JSON.stringify(FREETEXTS)),
+    fields: gatherFields(),
+    logo: LOGO||'',
+    format: document.getElementById('formato').value,
+    perRiga: document.getElementById('perRiga').value,
+    hmm: document.getElementById('hmm').value,
+    rollW: document.getElementById('rollW').value,
+    rollH: document.getElementById('rollH').value,
+    rollGap: document.getElementById('rollGap').value
+  };
+}
+function applyPreset(p){
+  if(!p) return;
+  if(p.layout) LAYOUT=JSON.parse(JSON.stringify(p.layout));
+  if(p.freetexts) FREETEXTS=JSON.parse(JSON.stringify(p.freetexts));
+  if(p.fields) FIELDS.forEach(function(f){ var cb=document.getElementById('f_'+f.key); if(cb && p.fields[f.key]!==undefined) cb.checked=p.fields[f.key]; });
+  if(typeof p.logo==='string'){ LOGO=p.logo; document.getElementById('logoName').textContent=LOGO?'(logo dal layout)':''; }
+  if(p.format) document.getElementById('formato').value=p.format;
+  if(p.perRiga) document.getElementById('perRiga').value=p.perRiga;
+  if(p.hmm) document.getElementById('hmm').value=p.hmm;
+  if(p.rollW) document.getElementById('rollW').value=p.rollW;
+  if(p.rollH) document.getElementById('rollH').value=p.rollH;
+  if(p.rollGap!==undefined && p.rollGap!=='') document.getElementById('rollGap').value=p.rollGap;
+  saveLayout(); saveFT(); updateFormatoUI(); render();
+}
+function refreshPresetSelect(selName){
+  var presets=loadPresets(); var el=document.getElementById('presetSel');
+  var cur = selName || el.value;
+  el.innerHTML='<option value="">— layout —</option>';
+  Object.keys(presets).forEach(function(n){
+    var o=document.createElement('option'); o.value=n; o.textContent=n; el.appendChild(o);
+  });
+  if(cur && presets[cur]) el.value=cur;
+}
 
 // ===== toolbar toggles =====
 (function buildToggles(){
@@ -529,12 +581,20 @@ function updateFormatoUI(){
 function makeDraggable(et){
   et.querySelectorAll('.el').forEach(function(el){
     var key=el.dataset.key;
-    // --- doppio click su un testo libero: modifica o elimina ---
+    // --- testo libero: pulsante elimina (✕) + doppio click per correggere ---
     if(key.indexOf('ft_')===0){
+      var del=document.createElement('div'); del.className='ftdel'; del.textContent='✕'; del.title='Elimina testo';
+      del.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      del.addEventListener('click', function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        FREETEXTS=FREETEXTS.filter(function(f){ return 'ft_'+f.id!==key; });
+        delete LAYOUT[key]; saveFT(); saveLayout(); render();
+      });
+      el.appendChild(del);
       el.addEventListener('dblclick', function(ev){
         ev.preventDefault();
         var ft=ftById(key); if(!ft) return;
-        var nt=prompt('Modifica testo (lascia vuoto per eliminarlo):', ft.text);
+        var nt=prompt('Correggi il testo (lascia vuoto per eliminarlo):', ft.text);
         if(nt===null) return;
         if(nt===''){ FREETEXTS=FREETEXTS.filter(function(f){ return 'ft_'+f.id!==key; }); delete LAYOUT[key]; }
         else { ft.text=nt; }
@@ -913,6 +973,24 @@ document.getElementById('btnEdit').addEventListener('click', function(){
   EDIT=!EDIT; document.body.classList.toggle('editing',EDIT); this.classList.toggle('on',EDIT);
   this.textContent=EDIT?'✅ Fine modifica':'✏️ Sposta/ridimensiona'; render();
 });
+document.getElementById('btnSavePreset').addEventListener('click', function(){
+  var cur=document.getElementById('presetSel').value;
+  var name=prompt('Nome del layout da salvare:', cur||'');
+  if(name===null) return; name=name.trim(); if(!name) return;
+  var presets=loadPresets(); presets[name]=currentPreset();
+  if(savePresets(presets)){ refreshPresetSelect(name); alert('Layout "'+name+'" salvato.'); }
+});
+document.getElementById('presetSel').addEventListener('change', function(){
+  if(!this.value) return;
+  applyPreset(loadPresets()[this.value]);
+});
+document.getElementById('btnDelPreset').addEventListener('click', function(){
+  var name=document.getElementById('presetSel').value;
+  if(!name){ alert('Seleziona prima un layout da eliminare.'); return; }
+  if(!confirm('Eliminare il layout "'+name+'"?')) return;
+  var presets=loadPresets(); delete presets[name]; savePresets(presets);
+  refreshPresetSelect(''); document.getElementById('presetSel').value='';
+});
 document.getElementById('btnData').addEventListener('click', function(){
   var g=document.getElementById('grid');
   var show = g.style.display==='none';
@@ -929,6 +1007,7 @@ document.getElementById('btnNew').addEventListener('click', function(){
   document.getElementById('drop').style.display='block'; render();
 });
 updateFormatoUI();
+refreshPresetSelect();
 </script>
 </body>
 </html>
