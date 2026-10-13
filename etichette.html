@@ -11,8 +11,7 @@
   html, body { margin: 0; padding: 0; }
   body {
     font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background: #f3f4f6;
-    color: #111;
+    background: #f3f4f6; color: #111;
   }
 
   /* ---------- Toolbar ---------- */
@@ -20,8 +19,7 @@
     position: sticky; top: 0; z-index: 50;
     background: #0f172a; color: #fff;
     padding: 12px 18px;
-    display: flex; flex-wrap: wrap; gap: 14px 22px;
-    align-items: center;
+    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center;
     box-shadow: 0 2px 8px rgba(0,0,0,.25);
   }
   #toolbar h1 { font-size: 16px; margin: 0 10px 0 0; font-weight: 700; letter-spacing:.3px; }
@@ -42,8 +40,20 @@
   #toolbar button.ghost:hover { background:#475569; }
   #toolbar button.imgbtn { background:#0e7490; }
   #toolbar button.imgbtn:hover { background:#0c5f78; }
+  #toolbar button.editbtn { background:#7c3aed; }
+  #toolbar button.editbtn:hover { background:#6d28d9; }
+  #toolbar button.editbtn.on { background:#16a34a; }
   #count { font-size:12px; opacity:.8; }
   #logoName { font-size:11px; opacity:.8; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- Barra modalità modifica ---------- */
+  #editbar {
+    display:none; background:#ecfdf5; color:#065f46;
+    border-bottom:1px solid #a7f3d0; padding:8px 18px; font-size:13px;
+    position:sticky; top:52px; z-index:49;
+  }
+  body.editing #editbar { display:block; }
+  #editbar b { color:#047857; }
 
   /* ---------- Drop zone ---------- */
   #drop {
@@ -66,43 +76,42 @@
     box-shadow: 0 3px 14px rgba(0,0,0,.12);
   }
   .et {
+    position:relative;
     border:1px solid #cbd5e1; border-radius:2mm;
-    padding:2mm 2.5mm; display:flex; gap:2.5mm;
-    align-items:center; overflow:hidden;
-    page-break-inside:avoid; break-inside:avoid;
+    overflow:hidden; page-break-inside:avoid; break-inside:avoid;
   }
-  /* SINISTRA: codice (QR + barcode) */
-  .et .codes { display:flex; flex-direction:column; align-items:center; gap:1mm; flex:0 0 auto; }
-  .et .qr svg { display:block; }
-  .et .bc svg  { display:block; }
-
-  /* CENTRO: info */
-  .et .info { flex:1 1 auto; min-width:0; line-height:1.2; }
-  .et .info .topline { display:flex; justify-content:space-between; align-items:flex-start; gap:2mm; }
-  .et .info .nm  { font-size:3.3mm; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .et .info .cr  { font-size:2.8mm; color:#334155; margin-top:.8mm; }
-  .et .info .cr b { color:#0f172a; font-weight:600; }
-  .et .info .cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; margin-top:.8mm; }
-
-  /* DESTRA: taglia grande */
-  .et .taglia {
-    flex:0 0 auto; text-align:center; line-height:1;
-    border:1px solid #0f172a; border-radius:1.5mm;
-    padding:1mm 1.6mm; min-width:11mm;
+  /* elementi posizionati in assoluto in % */
+  .el { position:absolute; }
+  .el .qrbox svg, .el .bcbox svg { display:block; }
+  .el.nm  { font-size:3.2mm; font-weight:700; line-height:1.15; }
+  .el.cr  { font-size:2.8mm; color:#334155; line-height:1.15; }
+  .el.cr b { color:#0f172a; font-weight:600; }
+  .el.cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; }
+  .el.taglia {
+    text-align:center; line-height:1;
+    border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm;
   }
-  .et .taglia .lbl { font-size:2mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
-  .et .taglia .val { font-size:6mm; font-weight:800; }
+  .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
+  .el.taglia .val { font-size:5.2mm; font-weight:800; }
+  .el.logo img { display:block; object-fit:contain; }
 
-  /* LOGO */
-  .et .logo { flex:0 0 auto; display:flex; align-items:center; }
-  .et .logo img { display:block; object-fit:contain; }
+  /* --- etichetta modificabile (prima del foglio) --- */
+  .et.editable { outline:2px solid #16a34a; }
+  .et.editable .el {
+    cursor:move; outline:1px dashed #94a3b8; border-radius:1mm;
+    transition:outline-color .1s;
+  }
+  .et.editable .el:hover { outline-color:#16a34a; background:rgba(22,163,74,.06); }
+  .et.editable .el.dragging { outline:2px solid #16a34a; background:rgba(22,163,74,.12); z-index:30; }
 
   @media print {
-    #toolbar, #drop { display:none !important; }
+    #toolbar, #editbar, #drop { display:none !important; }
     body { background:#fff; }
     #out { padding:0; }
     .foglio { box-shadow:none; margin:0; width:auto; min-height:auto; padding:8mm 6mm; }
     .foglio + .foglio { page-break-before:always; }
+    .et.editable { outline:none; }
+    .et.editable .el { outline:none !important; background:none !important; }
     @page { size:A4; margin:0; }
   }
 </style>
@@ -136,10 +145,16 @@
   <span class="chk"><input type="checkbox" id="fLogo" checked> Logo</span>
   <button class="imgbtn" id="btnImg">🖼️ Immagine</button>
   <span id="logoName"></span>
+  <button class="editbtn" id="btnEdit">✏️ Sposta elementi</button>
   <button id="btnPrint">🖨️ Stampa</button>
   <button class="ghost" id="btnNew">📂 Altro CSV</button>
   <span id="count"></span>
   <input type="file" id="imgInput" accept="image/*" style="display:none">
+</div>
+
+<div id="editbar">
+  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli. La disposizione viene applicata a tutte le etichette e salvata.
+  &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
 <div id="drop">
@@ -154,26 +169,56 @@
 <script>
 // ---------- stato ----------
 var ROWS = [];
-var LOGO = '';   // data URL dell'immagine/logo
+var LOGO = '';
+var EDIT = false;
+var LS_KEY = 'myc_etichetta_layout_v1';
 
-// ---------- CSV parser ----------
+// posizioni di default (in % della larghezza/altezza etichetta)
+var DEFAULT_LAYOUT = {
+  qr:     { x: 2,  y: 4 },
+  bc:     { x: 2,  y: 58 },
+  nm:     { x: 40, y: 8 },
+  cr:     { x: 40, y: 34 },
+  cod:    { x: 40, y: 72 },
+  taglia: { x: 78, y: 10 },
+  logo:   { x: 72, y: 52 }
+};
+var LAYOUT = loadLayout();
+
+function loadLayout(){
+  try{
+    var s = localStorage.getItem(LS_KEY);
+    if(s){
+      var o = JSON.parse(s);
+      var merged = {};
+      for(var k in DEFAULT_LAYOUT){
+        merged[k] = (o[k] && typeof o[k].x==='number') ? o[k] : {x:DEFAULT_LAYOUT[k].x, y:DEFAULT_LAYOUT[k].y};
+      }
+      return merged;
+    }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+}
+function saveLayout(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(LAYOUT)); }catch(e){}
+}
+
+// ---------- CSV ----------
 function parseCSV(text){
-  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
   var firstLine = text.split(/\r?\n/)[0] || '';
   var delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
   var rows = [], cur = [], field = '', inQ = false;
   for(var i=0;i<text.length;i++){
     var ch = text[i];
     if(inQ){
-      if(ch === '"'){
-        if(text[i+1] === '"'){ field += '"'; i++; }
-        else inQ = false;
-      } else field += ch;
+      if(ch === '"'){ if(text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += ch;
     } else {
       if(ch === '"') inQ = true;
       else if(ch === delim){ cur.push(field); field=''; }
       else if(ch === '\n'){ cur.push(field); rows.push(cur); cur=[]; field=''; }
-      else if(ch === '\r'){ /* skip */ }
+      else if(ch === '\r'){}
       else field += ch;
     }
   }
@@ -189,23 +234,109 @@ function parseCSV(text){
   }
   return out;
 }
-
 function get(row, names){
   if(typeof names === 'string') names = [names];
   var keys = Object.keys(row);
   for(var n=0;n<names.length;n++){
     var want = names[n].toLowerCase();
-    for(var k=0;k<keys.length;k++){
-      if(keys[k].toLowerCase() === want) return row[keys[k]];
-    }
-    for(var k2=0;k2<keys.length;k2++){
-      if(keys[k2].toLowerCase().indexOf(want) !== -1) return row[keys[k2]];
-    }
+    for(var k=0;k<keys.length;k++){ if(keys[k].toLowerCase() === want) return row[keys[k]]; }
+    for(var k2=0;k2<keys.length;k2++){ if(keys[k2].toLowerCase().indexOf(want) !== -1) return row[keys[k2]]; }
   }
   return '';
 }
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
 
-// ---------- render ----------
+// ---------- costruzione singola etichetta ----------
+function buildLabel(row, hmm, largMm, flags){
+  var et = document.createElement('div');
+  et.className = 'et';
+  et.style.height = hmm + 'mm';
+
+  var codice  = get(row, ['CODICE','codice','barcode','matricola']);
+  var nome    = get(row, ['NOME E COGNOME','nome e cognome','nome','cognome']);
+  var cliente = get(row, ['AZIENDA','azienda','cliente']);
+  var reparto = get(row, ['REPARTO','reparto']);
+  var taglia  = get(row, ['TAGLIA','taglia','size']);
+
+  function place(el, key){
+    el.classList.add('el');
+    el.dataset.key = key;
+    el.style.left = LAYOUT[key].x + '%';
+    el.style.top  = LAYOUT[key].y + '%';
+    et.appendChild(el);
+  }
+
+  // QR
+  if(flags.qr && codice){
+    var qd = document.createElement('div'); qd.className='qrbox';
+    try{
+      var qr = qrcode(0,'M'); qr.addData(codice); qr.make();
+      var qrSize = Math.max(10, Math.min(hmm - 10, 22));
+      qd.innerHTML = qr.createSvgTag({cellSize:2, margin:0, scalable:true});
+      var qsvg = qd.querySelector('svg');
+      if(qsvg){ qsvg.style.width=qrSize+'mm'; qsvg.style.height=qrSize+'mm'; }
+    }catch(e){}
+    place(qd,'qr');
+  }
+  // Barcode
+  if(flags.bc && codice){
+    var bd = document.createElement('div'); bd.className='bcbox';
+    var bsvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    bd.appendChild(bsvg);
+    try{
+      JsBarcode(bsvg, String(codice), {format:'CODE128', displayValue:false, height:34, margin:0, width:1.4});
+      bsvg.style.width = Math.min(largMm*0.5, 34) + 'mm';
+      bsvg.style.height = '8mm';
+    }catch(e){}
+    place(bd,'bc');
+  }
+  // Nome
+  if(flags.nm && nome){
+    var nm = document.createElement('div'); nm.className='nm';
+    nm.style.maxWidth = (largMm*0.55)+'mm';
+    nm.textContent = nome;
+    place(nm,'nm');
+  }
+  // Cliente · reparto
+  var crParts = [];
+  if(flags.cli && cliente) crParts.push('<b>'+esc(cliente)+'</b>');
+  if(flags.rep && reparto) crParts.push(esc(reparto));
+  if(crParts.length){
+    var cr = document.createElement('div'); cr.className='cr';
+    cr.style.maxWidth = (largMm*0.55)+'mm';
+    cr.innerHTML = crParts.join(' · ');
+    place(cr,'cr');
+  }
+  // Codice testo
+  if(codice){
+    var cd = document.createElement('div'); cd.className='cod';
+    cd.textContent = codice;
+    place(cd,'cod');
+  }
+  // Taglia
+  if(flags.tag && taglia){
+    var tg = document.createElement('div'); tg.className='taglia';
+    tg.innerHTML = '<div class="lbl">Taglia</div><div class="val">'+esc(taglia)+'</div>';
+    place(tg,'taglia');
+  }
+  // Logo
+  if(flags.logo && LOGO){
+    var lg = document.createElement('div'); lg.className='logo';
+    var img = document.createElement('img'); img.src = LOGO;
+    img.style.maxHeight = Math.min((hmm/2), 16) + 'mm';
+    img.style.maxWidth = '20mm';
+    lg.appendChild(img);
+    place(lg,'logo');
+  }
+
+  return et;
+}
+
+// ---------- render tutti i fogli ----------
 function render(){
   var out = document.getElementById('out');
   out.innerHTML = '';
@@ -215,26 +346,24 @@ function render(){
   var hmm     = parseInt(document.getElementById('hmm').value,10) || 40;
   var copie   = parseInt(document.getElementById('copie').value,10) || 1;
 
-  var showQr  = document.getElementById('fQr').checked;
-  var showBc  = document.getElementById('fBc').checked;
-  var showNm  = document.getElementById('fNm').checked;
-  var showCli = document.getElementById('fCli').checked;
-  var showRep = document.getElementById('fRep').checked;
-  var showTag = document.getElementById('fTag').checked;
-  var showLogo= document.getElementById('fLogo').checked && LOGO;
+  var flags = {
+    qr: document.getElementById('fQr').checked,
+    bc: document.getElementById('fBc').checked,
+    nm: document.getElementById('fNm').checked,
+    cli:document.getElementById('fCli').checked,
+    rep:document.getElementById('fRep').checked,
+    tag:document.getElementById('fTag').checked,
+    logo:document.getElementById('fLogo').checked && !!LOGO
+  };
 
   var largMm = ((210 - 12) / perRiga) - 3;
   var perColonna = Math.max(1, Math.floor((297 - 16) / (hmm + 3)));
   var perFoglio = perRiga * perColonna;
 
   var items = [];
-  for(var i=0;i<ROWS.length;i++){
-    for(var c=0;c<copie;c++) items.push(ROWS[i]);
-  }
+  for(var i=0;i<ROWS.length;i++){ for(var c=0;c<copie;c++) items.push(ROWS[i]); }
 
-  var totEt = items.length;
   var foglio = null;
-
   for(var idx=0; idx<items.length; idx++){
     if(idx % perFoglio === 0){
       foglio = document.createElement('div');
@@ -242,113 +371,63 @@ function render(){
       foglio.style.gridTemplateColumns = 'repeat(' + perRiga + ', ' + largMm + 'mm)';
       out.appendChild(foglio);
     }
-    var row = items[idx];
-
-    var codice  = get(row, ['CODICE','codice','barcode','matricola']);
-    var nome    = get(row, ['NOME E COGNOME','nome e cognome','nome','cognome']);
-    var cliente = get(row, ['AZIENDA','azienda','cliente']);
-    var reparto = get(row, ['REPARTO','reparto']);
-    var taglia  = get(row, ['TAGLIA','taglia','size']);
-
-    var et = document.createElement('div');
-    et.className = 'et';
-    et.style.height = hmm + 'mm';
-
-    // --- SINISTRA: codice (QR + barcode) ---
-    var codesDiv = document.createElement('div');
-    codesDiv.className = 'codes';
-
-    if(showQr && codice){
-      var qrWrap = document.createElement('div');
-      qrWrap.className = 'qr';
-      try{
-        var qr = qrcode(0, 'M');
-        qr.addData(codice);
-        qr.make();
-        var qrSize = Math.max(10, Math.min(hmm - 12, 22));
-        qrWrap.innerHTML = qr.createSvgTag({ cellSize:2, margin:0, scalable:true });
-        var qsvg = qrWrap.querySelector('svg');
-        if(qsvg){ qsvg.style.width = qrSize+'mm'; qsvg.style.height = qrSize+'mm'; }
-      }catch(e){}
-      codesDiv.appendChild(qrWrap);
-    }
-
-    if(showBc && codice){
-      var bcWrap = document.createElement('div');
-      bcWrap.className = 'bc';
-      var bsvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-      bcWrap.appendChild(bsvg);
-      try{
-        JsBarcode(bsvg, String(codice), {
-          format:'CODE128', displayValue:false, height:34, margin:0, width:1.4
-        });
-        bsvg.style.width = Math.min(largMm*0.45, 34) + 'mm';
-        bsvg.style.height = '8mm';
-      }catch(e){}
-      codesDiv.appendChild(bcWrap);
-    }
-
-    if(codesDiv.childNodes.length) et.appendChild(codesDiv);
-
-    // --- CENTRO: info (nome -> cliente/reparto -> codice) ---
-    var info = document.createElement('div');
-    info.className = 'info';
-
-    // riga alta: nome a sx, taglia a dx
-    var top = document.createElement('div');
-    top.className = 'topline';
-
-    var leftCol = document.createElement('div');
-    leftCol.style.minWidth = '0';
-    leftCol.style.flex = '1 1 auto';
-    var html = '';
-    if(showNm && nome) html += '<div class="nm">'+esc(nome)+'</div>';
-    var cr = [];
-    if(showCli && cliente) cr.push('<b>'+esc(cliente)+'</b>');
-    if(showRep && reparto) cr.push(esc(reparto));
-    if(cr.length) html += '<div class="cr">'+cr.join(' · ')+'</div>';
-    if(codice) html += '<div class="cod">'+esc(codice)+'</div>';
-    leftCol.innerHTML = html;
-    top.appendChild(leftCol);
-
-    // DESTRA: taglia
-    if(showTag && taglia){
-      var tg = document.createElement('div');
-      tg.className = 'taglia';
-      tg.innerHTML = '<div class="lbl">Taglia</div><div class="val">'+esc(taglia)+'</div>';
-      top.appendChild(tg);
-    }
-
-    info.appendChild(top);
-    et.appendChild(info);
-
-    // LOGO (immagine) in alto a destra
-    if(showLogo){
-      var lg = document.createElement('div');
-      lg.className = 'logo';
-      var img = document.createElement('img');
-      img.src = LOGO;
-      var logoH = Math.min(hmm - 8, 16);
-      img.style.maxHeight = logoH + 'mm';
-      img.style.maxWidth = '22mm';
-      lg.appendChild(img);
-      et.appendChild(lg);
-    }
-
+    var et = buildLabel(items[idx], hmm, largMm, flags);
+    if(EDIT && idx === 0){ et.classList.add('editable'); makeDraggable(et); }
     foglio.appendChild(et);
   }
 
   document.getElementById('count').textContent =
-    totEt + ' etichette · ' + out.childNodes.length + ' foglio/i';
+    items.length + ' etichette · ' + out.childNodes.length + ' foglio/i';
 }
 
-function esc(s){
-  return String(s).replace(/[&<>"]/g, function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+// ---------- drag & drop nella prima etichetta ----------
+function makeDraggable(et){
+  var els = et.querySelectorAll('.el');
+  els.forEach(function(el){
+    el.addEventListener('mousedown', function(ev){
+      ev.preventDefault();
+      var key = el.dataset.key;
+      var rect = et.getBoundingClientRect();
+      var startX = ev.clientX, startY = ev.clientY;
+      var startLeft = LAYOUT[key].x, startTop = LAYOUT[key].y;
+      el.classList.add('dragging');
+
+      function move(e){
+        var dxPct = ((e.clientX - startX) / rect.width) * 100;
+        var dyPct = ((e.clientY - startY) / rect.height) * 100;
+        var nx = Math.max(-2, Math.min(98, startLeft + dxPct));
+        var ny = Math.max(-2, Math.min(98, startTop + dyPct));
+        LAYOUT[key].x = Math.round(nx*10)/10;
+        LAYOUT[key].y = Math.round(ny*10)/10;
+        el.style.left = LAYOUT[key].x + '%';
+        el.style.top  = LAYOUT[key].y + '%';
+      }
+      function up(){
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        el.classList.remove('dragging');
+        saveLayout();
+        applyLayoutToAll();
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
   });
 }
 
-// ---------- file handling ----------
+// aggiorna la posizione degli stessi elementi su tutte le etichette (senza ricostruire)
+function applyLayoutToAll(){
+  var allEt = document.querySelectorAll('#out .et');
+  allEt.forEach(function(et){
+    var els = et.querySelectorAll('.el');
+    els.forEach(function(el){
+      var k = el.dataset.key;
+      if(LAYOUT[k]){ el.style.left = LAYOUT[k].x + '%'; el.style.top = LAYOUT[k].y + '%'; }
+    });
+  });
+}
+
+// ---------- file ----------
 function handleFile(f){
   if(!f) return;
   var reader = new FileReader();
@@ -360,7 +439,6 @@ function handleFile(f){
   };
   reader.readAsText(f, 'UTF-8');
 }
-
 function handleImg(f){
   if(!f) return;
   var reader = new FileReader();
@@ -380,7 +458,6 @@ var imgInput = document.getElementById('imgInput');
 
 drop.addEventListener('click', function(){ fileInput.click(); });
 fileInput.addEventListener('change', function(){ handleFile(this.files[0]); });
-
 document.getElementById('btnImg').addEventListener('click', function(){ imgInput.click(); });
 imgInput.addEventListener('change', function(){ handleImg(this.files[0]); });
 
@@ -400,6 +477,17 @@ window.addEventListener('drop', function(e){
   document.getElementById(id).addEventListener('change', render);
 });
 
+document.getElementById('btnEdit').addEventListener('click', function(){
+  EDIT = !EDIT;
+  document.body.classList.toggle('editing', EDIT);
+  this.classList.toggle('on', EDIT);
+  this.textContent = EDIT ? '✅ Fine modifica' : '✏️ Sposta elementi';
+  render();
+});
+document.getElementById('btnReset').addEventListener('click', function(){
+  LAYOUT = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  saveLayout(); render();
+});
 document.getElementById('btnPrint').addEventListener('click', function(){ window.print(); });
 document.getElementById('btnNew').addEventListener('click', function(){
   ROWS = []; fileInput.value = '';
