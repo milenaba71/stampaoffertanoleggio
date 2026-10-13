@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -177,6 +178,7 @@ var LOGO = '';
 var EDIT = false;
 var MODE = 'data';     // 'data' (CSV / PDF con testo) | 'pdfimg' (PDF già impaginato)
 var PDFIMG = [];       // immagini pagine PDF (data URL)
+var CSVROWS = [];      // CSV completo caricato (master per l'aggancio OCR)
 var LS_KEY = 'myc_etichetta_layout_v3';
 
 var DEFAULT_LAYOUT = {};
@@ -537,6 +539,7 @@ function handleFile(f){
     var reader=new FileReader();
     reader.onload=function(e){
       ROWS=parseCSV(e.target.result);
+      CSVROWS=ROWS.slice();   // salva il master per l'aggancio OCR dei PDF
       document.getElementById('drop').style.display=ROWS.length?'none':'block';
       render();
       if(!ROWS.length) alert('Nessuna riga trovata nel CSV.');
@@ -549,7 +552,7 @@ async function handlePDF(arrbuf){
   var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
   try{
     var pdf=await pdfjsLib.getDocument({data:arrbuf}).promise;
-    // 1) prova a leggere testo tabellare
+    // 1) prova a leggere testo tabellare (raro)
     var rows=await extractTableFromPdf(pdf);
     var hasText = rows.length>0 && Object.keys(rows[0]||{}).some(function(k){ return k && k.trim()!==''; });
     if(hasText){
@@ -557,14 +560,22 @@ async function handlePDF(arrbuf){
       busy.style.display='none'; dropEl.style.display='none'; render();
       return;
     }
-    // 2) nessun testo -> ristampa le pagine come immagini
+    // 2) SOLUZIONE B: se c'è il CSV caricato, leggi il PDF con OCR e aggancia i codici al CSV
+    if(CSVROWS.length && window.Tesseract){
+      await pdfOcrMatch(pdf);
+      return;
+    }
+    // 3) nessun CSV ma OCR disponibile -> estrai i campi dal PDF (da verificare)
+    if(window.Tesseract){
+      await pdfOcrParse(pdf);
+      return;
+    }
+    // 4) ultima spiaggia -> ristampa immagini
     var res=await pdfPagesToImages(pdf);
     MODE='pdfimg'; PDFIMG=res.imgs; ROWS=[];
-    // prefill misura rotolo con la dimensione reale della pagina PDF (pt -> mm)
     if(res.wpt && res.hpt){
-      var wmm=Math.round(res.wpt/2.834), hmm=Math.round(res.hpt/2.834);
-      document.getElementById('rollW').value=wmm;
-      document.getElementById('rollH').value=hmm;
+      document.getElementById('rollW').value=Math.round(res.wpt/2.834);
+      document.getElementById('rollH').value=Math.round(res.hpt/2.834);
     }
     busy.style.display='none'; dropEl.style.display='none';
     render();
@@ -572,6 +583,149 @@ async function handlePDF(arrbuf){
     busy.style.display='none'; dropEl.style.display='block';
     alert('Errore nella lettura del PDF: '+(err&&err.message)+'\nProva con il CSV.');
   }
+}
+
+// ---- SOLUZIONE B: OCR del PDF + aggancio ai codici del CSV ----
+function normCode(s){ return (s==null?'':String(s)).toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function levenshtein(a,b){
+  if(a===b) return 0;
+  var m=a.length, n=b.length; if(!m) return n; if(!n) return m;
+  var prev=new Array(n+1), cur=new Array(n+1), i, j;
+  for(j=0;j<=n;j++) prev[j]=j;
+  for(i=1;i<=m;i++){
+    cur[0]=i;
+    for(j=1;j<=n;j++){
+      var cost = a.charAt(i-1)===b.charAt(j-1)?0:1;
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost);
+    }
+    var t=prev; prev=cur; cur=t;
+  }
+  return prev[n];
+}
+function buildCodeIndex(rows){
+  var map={}, list=[];
+  rows.forEach(function(r){
+    var code = cleanVal(get(r,['codice','CODICE','barcode']));
+    var nc = normCode(code);
+    if(nc){ map[nc]=r; list.push({nc:nc, row:r}); }
+  });
+  return {map:map, list:list};
+}
+function matchCode(tokens, idx){
+  var toks = tokens.map(normCode).filter(function(t){ return t.length>=4; });
+  // 1) match esatto
+  for(var i=0;i<toks.length;i++){ if(idx.map[toks[i]]) return {row:idx.map[toks[i]], token:toks[i], dist:0}; }
+  // 2) substring (il token contiene un codice o viceversa, lunghezza >=5)
+  for(var s=0;s<toks.length;s++){
+    for(var k=0;k<idx.list.length;k++){
+      var c=idx.list[k].nc;
+      if(c.length>=5 && (toks[s].indexOf(c)!==-1 || c.indexOf(toks[s])!==-1 && toks[s].length>=5))
+        return {row:idx.list[k].row, token:toks[s], dist:1};
+    }
+  }
+  // 3) distanza minima (<=2) e univoca
+  var best=null, best2=99;
+  for(var t=0;t<toks.length;t++){
+    for(var m=0;m<idx.list.length;m++){
+      var d=levenshtein(toks[t], idx.list[m].nc);
+      if(d<best2){ best2=d; best={row:idx.list[m].row, token:toks[t], dist:d}; }
+    }
+  }
+  if(best && best.dist<=2) return best;
+  return null;
+}
+// ---- SENZA CSV: OCR puro -> estrai i campi dal template (da verificare) ----
+function looksLikeCode(t){
+  var s=normCode(t);
+  return s.length>=5 && /[0-9]/.test(s) && /[A-Z]/.test(s);
+}
+function parseLabelText(text){
+  var lines = text.split(/[\n\r]+/).map(function(l){ return l.trim(); }).filter(function(l){ return l.length; });
+  var tokens = text.split(/[\s\n\r]+/).map(function(t){ return t.trim(); }).filter(function(t){ return t.length; });
+  var row = {};
+  // CODICE: il token "codice-simile" più lungo
+  var codeCand = tokens.filter(looksLikeCode).sort(function(a,b){ return b.length-a.length; });
+  if(codeCand.length) row.codice = codeCand[0].replace(/[^A-Za-z0-9]/g,'');
+  // TAGLIA: dopo "TG" o "TG."
+  var mt = text.match(/\bTG\.?\s*([A-Z0-9]{1,4})\b/i);
+  if(mt) row.taglia = mt[1].toUpperCase();
+  // REPARTO: testo sulla riga della taglia, prima di "TG"
+  for(var i=0;i<lines.length;i++){
+    var mr = lines[i].match(/^(.*?)\s*\bTG\.?\s*[A-Z0-9]{1,4}\b/i);
+    if(mr && mr[1].trim()){ row.reparto = mr[1].trim(); break; }
+  }
+  // AZIENDA / TIPO: una riga con sole lettere (no codice, no TG)
+  for(var j=0;j<lines.length;j++){
+    var ln=lines[j];
+    if(/\bTG\b/i.test(ln)) continue;
+    if(looksLikeCode(ln)) continue;
+    if(/^[A-Za-zÀ-ÿ0-9 .,'&\/-]{3,}$/.test(ln) && /[A-Za-z]/.test(ln) && !row.azienda){
+      // se contiene '-' tipo "TIPO-AZIENDA"
+      if(ln.indexOf('-')!==-1){ var p=ln.split('-'); row.tipo=p[0].trim(); row.azienda=p.slice(1).join('-').trim(); }
+      else row.azienda = ln.trim();
+    }
+  }
+  // DATA
+  var md = text.match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/);
+  if(md) row.created_at = md[1];
+  return row;
+}
+async function pdfOcrParse(pdf){
+  var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
+  busy.style.display='block';
+  busy.innerHTML='⏳ Lettura PDF con OCR… (il primo avvio scarica il motore OCR)';
+  var res=await pdfPagesToImages(pdf);
+  var out=[];
+  var worker=await Tesseract.createWorker('eng');
+  for(var i=0;i<res.imgs.length;i++){
+    busy.innerHTML='⏳ OCR etichetta '+(i+1)+' di '+res.imgs.length+'…';
+    var r=await worker.recognize(res.imgs[i]);
+    var row=parseLabelText((r&&r.data&&r.data.text)||'');
+    if(Object.keys(row).length) out.push(row);
+  }
+  await worker.terminate();
+  busy.style.display='none'; dropEl.style.display='none';
+  if(!out.length){
+    MODE='pdfimg'; PDFIMG=res.imgs; ROWS=[]; render();
+    alert('OCR: non sono riuscito a estrarre dati dal PDF. Mostro la ristampa.');
+    return;
+  }
+  MODE='data'; PDFIMG=[]; ROWS=out; render();
+  alert('OCR senza CSV: estratte '+out.length+' etichette dal PDF.\n⚠️ I codici NON sono stati verificati: controllali a vista prima di stampare, perché l OCR puo sbagliare caratteri. Per la massima precisione carica il CSV e ricarica il PDF.');
+}
+
+async function pdfOcrMatch(pdf){
+  var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
+  busy.innerHTML='⏳ Lettura PDF con OCR… (il primo avvio scarica il motore OCR, può volerci qualche secondo)';
+  var idx=buildCodeIndex(CSVROWS);
+  var res=await pdfPagesToImages(pdf);
+  var matched=[], unmatched=[];
+  var worker = await Tesseract.createWorker('eng');
+  for(var i=0;i<res.imgs.length;i++){
+    busy.innerHTML='⏳ OCR etichetta '+(i+1)+' di '+res.imgs.length+'…';
+    var out = await worker.recognize(res.imgs[i]);
+    var text = (out && out.data && out.data.text) || '';
+    var tokens = text.split(/[\s\n\r]+/);
+    var mm = matchCode(tokens, idx);
+    if(mm) matched.push({row:mm.row, dist:mm.dist});
+    else unmatched.push(i+1);
+  }
+  await worker.terminate();
+  busy.style.display='none'; dropEl.style.display='none';
+
+  if(!matched.length){
+    MODE='pdfimg'; PDFIMG=res.imgs; ROWS=[];
+    render();
+    alert('OCR: non sono riuscito ad agganciare nessun codice del PDF ai codici del CSV.\nControlla che il CSV contenga gli stessi capi del PDF. Intanto mostro la ristampa.');
+    return;
+  }
+  MODE='data'; PDFIMG=[]; ROWS = matched.map(function(x){ return x.row; });
+  render();
+  var approx = matched.filter(function(x){ return x.dist>0; }).length;
+  var msg = 'Soluzione B: '+matched.length+' etichette lette dal PDF e agganciate al CSV';
+  if(approx) msg += '\n• '+approx+' codici corretti automaticamente (OCR impreciso): VERIFICALI a vista';
+  if(unmatched.length) msg += '\n• '+unmatched.length+' pagine non agganciate (pagine '+unmatched.join(', ')+'): controlla manualmente';
+  alert(msg);
 }
 
 async function pdfPagesToImages(pdf){
