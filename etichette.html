@@ -6,119 +6,79 @@
 <title>Mycroclean – Stampa Etichette</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background: #f3f4f6; color: #111;
-  }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f3f4f6; color:#111; }
 
-  /* ---------- Toolbar ---------- */
   #toolbar {
     position: sticky; top: 0; z-index: 50;
-    background: #0f172a; color: #fff;
-    padding: 12px 18px;
-    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    background:#0f172a; color:#fff; padding:12px 18px;
+    display:flex; flex-wrap:wrap; gap:12px 20px; align-items:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
   }
-  #toolbar h1 { font-size: 16px; margin: 0 10px 0 0; font-weight: 700; letter-spacing:.3px; }
+  #toolbar h1 { font-size:16px; margin:0 8px 0 0; font-weight:700; letter-spacing:.3px; }
   #toolbar .grp { display:flex; align-items:center; gap:6px; font-size:13px; }
   #toolbar label { font-size:13px; }
   #toolbar select, #toolbar input[type=number] {
-    background:#1e293b; color:#fff; border:1px solid #334155;
-    border-radius:6px; padding:4px 6px; font-size:13px;
+    background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; padding:4px 6px; font-size:13px;
   }
-  #toolbar input[type=number] { width:60px; }
-  #toolbar .chk { display:flex; align-items:center; gap:4px; font-size:12px; background:#1e293b; padding:3px 8px; border-radius:6px; }
-  #toolbar button {
-    background:#2563eb; color:#fff; border:none; border-radius:6px;
-    padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;
-  }
+  #toolbar input[type=number] { width:58px; }
+  #toggles { display:flex; flex-wrap:wrap; gap:4px 6px; max-width:100%; }
+  #toggles .chk { display:flex; align-items:center; gap:3px; font-size:11px; background:#1e293b; padding:2px 7px; border-radius:6px; white-space:nowrap; }
+  #toolbar button { background:#2563eb; color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
   #toolbar button:hover { background:#1d4ed8; }
   #toolbar button.ghost { background:#334155; }
   #toolbar button.ghost:hover { background:#475569; }
   #toolbar button.imgbtn { background:#0e7490; }
-  #toolbar button.imgbtn:hover { background:#0c5f78; }
   #toolbar button.editbtn { background:#7c3aed; }
-  #toolbar button.editbtn:hover { background:#6d28d9; }
   #toolbar button.editbtn.on { background:#16a34a; }
-  #count { font-size:12px; opacity:.8; }
-  #logoName { font-size:11px; opacity:.8; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #count { font-size:12px; opacity:.85; }
+  #logoName { font-size:11px; opacity:.8; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  /* ---------- Barra modalità modifica ---------- */
-  #editbar {
-    display:none; background:#ecfdf5; color:#065f46;
-    border-bottom:1px solid #a7f3d0; padding:8px 18px; font-size:13px;
-    position:sticky; top:52px; z-index:49;
-  }
+  #editbar { display:none; background:#ecfdf5; color:#065f46; border-bottom:1px solid #a7f3d0; padding:8px 18px; font-size:13px; position:sticky; top:52px; z-index:49; }
   body.editing #editbar { display:block; }
   #editbar b { color:#047857; }
 
-  /* ---------- Drop zone ---------- */
   #drop {
-    margin: 28px auto; max-width: 640px;
-    border: 3px dashed #94a3b8; border-radius: 14px;
-    background:#fff; padding: 46px 24px; text-align:center;
-    color:#475569; cursor:pointer; transition:.15s;
+    margin:28px auto; max-width:660px; border:3px dashed #94a3b8; border-radius:14px;
+    background:#fff; padding:42px 24px; text-align:center; color:#475569; cursor:pointer; transition:.15s;
   }
   #drop.hover { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
   #drop b { color:#0f172a; }
   #drop .big { font-size:17px; margin-bottom:8px; }
   #drop .small { font-size:13px; opacity:.8; margin-top:10px; }
+  #busy { display:none; text-align:center; padding:20px; color:#2563eb; font-weight:600; }
 
-  /* ---------- Fogli ---------- */
-  #out { padding: 10px 0 60px; }
-  .foglio {
-    background:#fff; width:210mm; min-height:297mm;
-    margin: 0 auto 16px; padding: 8mm 6mm;
-    display:grid; gap:3mm; align-content:start;
-    box-shadow: 0 3px 14px rgba(0,0,0,.12);
-  }
-  .et {
-    position:relative;
-    border:1px solid #cbd5e1; border-radius:2mm;
-    overflow:hidden; page-break-inside:avoid; break-inside:avoid;
-  }
-  /* elementi posizionati in assoluto in % */
+  #out { padding:10px 0 60px; }
+  .foglio { background:#fff; width:210mm; min-height:297mm; margin:0 auto 16px; padding:8mm 6mm;
+            display:grid; gap:3mm; align-content:start; box-shadow:0 3px 14px rgba(0,0,0,.12); }
+  .et { position:relative; border:1px solid #cbd5e1; border-radius:2mm; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
   .el { position:absolute; }
   .el .qrbox svg, .el .bcbox svg { display:block; }
-  .el.nm  { font-size:3.2mm; font-weight:700; line-height:1.15; }
-  .el.cr  { font-size:2.8mm; color:#334155; line-height:1.15; }
-  .el.cr b { color:#0f172a; font-weight:600; }
-  .el.cod { font-size:2.8mm; font-weight:700; letter-spacing:.2px; }
-  .el.taglia {
-    text-align:center; line-height:1;
-    border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm;
-  }
+  .el.txt { font-size:2.8mm; line-height:1.15; color:#1e293b; }
+  .el.txt.strong { font-weight:700; color:#0f172a; }
+  .el.txt .k { color:#64748b; font-weight:600; }
+  .el.taglia { text-align:center; line-height:1; border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm; }
   .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
   .el.taglia .val { font-size:5.2mm; font-weight:800; }
   .el.logo img { display:block; object-fit:contain; }
 
-  /* --- etichetta modificabile (prima del foglio) --- */
   .et.editable { outline:2px solid #16a34a; }
-  .et.editable .el {
-    cursor:move; outline:1px dashed #94a3b8; border-radius:1mm;
-    transition:outline-color .1s;
-  }
+  .et.editable .el { cursor:move; outline:1px dashed #94a3b8; border-radius:1mm; }
   .et.editable .el:hover { outline-color:#16a34a; background:rgba(22,163,74,.06); }
   .et.editable .el.dragging { outline:2px solid #16a34a; background:rgba(22,163,74,.12); z-index:30; }
 
-  /* ---------- Rotolo termico (una etichetta per pagina) ---------- */
-  .rotolo {
-    background:#fff; margin:0 auto 10px;
-    box-shadow:0 3px 14px rgba(0,0,0,.12);
-  }
+  .rotolo { background:#fff; margin:0 auto 10px; box-shadow:0 3px 14px rgba(0,0,0,.12); }
   .rotolo .et { width:100%; height:100%; border:1px solid #cbd5e1; border-radius:0; }
 
   @media print {
-    #toolbar, #editbar, #drop { display:none !important; }
+    #toolbar, #editbar, #drop, #busy { display:none !important; }
     body { background:#fff; }
     #out { padding:0; }
-    /* A4 */
     .foglio { box-shadow:none; margin:0; width:auto; min-height:auto; padding:8mm 6mm; }
     .foglio + .foglio { page-break-before:always; }
-    /* Rotolo */
     .rotolo { box-shadow:none; margin:0; page-break-after:always; break-after:page; }
     .rotolo .et { border:none; }
     .et.editable { outline:none; }
@@ -140,391 +100,467 @@
   </div>
   <div class="grp a4only">
     <label>Per riga</label>
-    <select id="perRiga">
-      <option value="2">2</option>
-      <option value="3" selected>3</option>
-      <option value="4">4</option>
-    </select>
+    <select id="perRiga"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option></select>
   </div>
   <div class="grp a4only">
     <label>Altezza mm</label>
-    <input type="number" id="hmm" value="40" min="22" max="120">
+    <input type="number" id="hmm" value="40" min="22" max="140">
   </div>
   <div class="grp rollonly" style="display:none">
     <label>Etichetta L×A mm</label>
-    <input type="number" id="rollW" value="60" min="20" max="200" title="Larghezza etichetta">
+    <input type="number" id="rollW" value="60" min="20" max="200">
     <span>×</span>
-    <input type="number" id="rollH" value="40" min="15" max="200" title="Altezza etichetta">
+    <input type="number" id="rollH" value="40" min="15" max="200">
   </div>
   <div class="grp rollonly" style="display:none">
     <label>Gap mm</label>
-    <input type="number" id="rollGap" value="2" min="0" max="20" title="Spazio tra etichette (vuoto tra una e l'altra sul rotolo)">
+    <input type="number" id="rollGap" value="2" min="0" max="20">
   </div>
-  <div class="grp">
-    <label>Copie/capo</label>
-    <input type="number" id="copie" value="1" min="1" max="50">
-  </div>
-  <span class="chk"><input type="checkbox" id="fQr" checked> QR</span>
-  <span class="chk"><input type="checkbox" id="fBc" checked> Barcode</span>
-  <span class="chk"><input type="checkbox" id="fNm" checked> Nome</span>
-  <span class="chk"><input type="checkbox" id="fCli" checked> Cliente</span>
-  <span class="chk"><input type="checkbox" id="fRep" checked> Reparto</span>
-  <span class="chk"><input type="checkbox" id="fTag" checked> Taglia</span>
-  <span class="chk"><input type="checkbox" id="fLogo" checked> Logo</span>
+  <div class="grp"><label>Copie/capo</label><input type="number" id="copie" value="1" min="1" max="50"></div>
+
+  <span id="toggles"></span>
+
   <button class="imgbtn" id="btnImg">🖼️ Immagine</button>
   <span id="logoName"></span>
   <button class="editbtn" id="btnEdit">✏️ Sposta elementi</button>
   <button id="btnPrint">🖨️ Stampa</button>
-  <button class="ghost" id="btnNew">📂 Altro CSV</button>
+  <button class="ghost" id="btnNew">📂 Altro file</button>
   <span id="count"></span>
   <input type="file" id="imgInput" accept="image/*" style="display:none">
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli. La disposizione viene applicata a tutte le etichette e salvata.
+  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde). La disposizione si applica a tutte e viene salvata.
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
 <div id="drop">
-  <div class="big">Trascina qui il <b>file CSV</b> esportato da next.mycroclean.com</div>
+  <div class="big">Trascina qui il file <b>CSV</b> o <b>PDF</b> esportato da next.mycroclean.com</div>
   <div>oppure clicca per selezionarlo</div>
-  <div class="small">Il file resta sul tuo computer: nessun caricamento, nessuna password.</div>
-  <input type="file" id="file" accept=".csv,text/csv" style="display:none">
+  <div class="small">Il file resta sul tuo computer: nessun caricamento, nessuna password. Il PDF viene convertito in tabella automaticamente.</div>
+  <input type="file" id="file" accept=".csv,text/csv,.pdf,application/pdf" style="display:none">
 </div>
+<div id="busy">⏳ Conversione PDF in corso…</div>
 
 <div id="out"></div>
 
 <script>
-// ---------- stato ----------
+if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+
+// ===== campi =====
+// kind: qr | bc | taglia | logo | text
+var FIELDS = [
+  { key:'qr',       lab:'QR',        kind:'qr',     on:true,  x:2,  y:4 },
+  { key:'bc',       lab:'Barcode',   kind:'bc',     on:true,  x:2,  y:60 },
+  { key:'cod',      lab:'Codice',    kind:'text',   on:true,  strong:true, x:38, y:4,  cols:['CODICE','codice','barcode'] },
+  { key:'nome',     lab:'Nome',      kind:'text',   on:true,  strong:true, x:38, y:17, cols:['NOME E COGNOME','nome e cognome','nome','cognome'] },
+  { key:'cliente',  lab:'Cliente',   kind:'text',   on:true,  x:38, y:30, cols:['CLIENT/AZIENDA','AZIENDA','azienda','cliente','client'] },
+  { key:'reparto',  lab:'Reparto',   kind:'text',   on:true,  x:38, y:42, prefix:'Reparto', cols:['REPARTO','reparto'] },
+  { key:'taglia',   lab:'Taglia',    kind:'taglia', on:true,  x:80, y:6,  cols:['TAGLIA','taglia','size'] },
+  { key:'logo',     lab:'Logo',      kind:'logo',   on:true,  x:74, y:52 },
+  { key:'armadio',  lab:'Armadio',   kind:'text',   on:false, x:38, y:54, prefix:'Armadio', cols:['ARMADIO','armadio'] },
+  { key:'posizione',lab:'Posizione', kind:'text',   on:false, x:38, y:62, prefix:'Posizione', cols:['POSIZIONE','posizione'] },
+  { key:'tipo',     lab:'Tipo',      kind:'text',   on:false, x:38, y:70, prefix:'Tipo', cols:['TIPO','tipo'] },
+  { key:'matricola',lab:'Matricola', kind:'text',   on:false, x:38, y:78, prefix:'Matr.', cols:['MATRICOLA','matricola'] },
+  { key:'iniziali', lab:'Iniziali',  kind:'text',   on:false, x:38, y:86, prefix:'Iniz.', cols:['INIZIALI','iniziali'] },
+  { key:'esterna',  lab:'Esterna',   kind:'text',   on:false, x:62, y:70, prefix:'Est.', cols:['ESTERNA','esterna'] },
+  { key:'lotto',    lab:'Lotto',     kind:'text',   on:false, x:62, y:78, prefix:'Lotto', cols:['LOTTO','lotto'] },
+  { key:'dataCr',   lab:'Data creaz.',kind:'text',  on:false, x:62, y:86, prefix:'Creato', cols:['DATA DI CREAZIONE','data di creazione','DATA','data'] },
+  { key:'dataPe',   lab:'Data pers.',kind:'text',   on:false, x:62, y:92, prefix:'Pers.', cols:['DATA DI PERSONALIZZAZIONE','data di personalizzazione'] },
+  { key:'lavaggi',  lab:'Lavaggi',   kind:'text',   on:false, x:62, y:62, prefix:'Lavaggi', cols:['NUMERO LAVAGGI','numero lavaggi esistenti','numero lavaggi','lavaggi'] },
+  { key:'note',     lab:'Note',      kind:'text',   on:false, x:38, y:94, prefix:'Note', cols:['NOTE','note'] }
+];
+
+// ===== stato =====
 var ROWS = [];
 var LOGO = '';
 var EDIT = false;
-var LS_KEY = 'myc_etichetta_layout_v1';
+var MODE = 'data';     // 'data' (CSV / PDF con testo) | 'pdfimg' (PDF già impaginato)
+var PDFIMG = [];       // immagini pagine PDF (data URL)
+var LS_KEY = 'myc_etichetta_layout_v2';
 
-// posizioni di default (in % della larghezza/altezza etichetta)
-var DEFAULT_LAYOUT = {
-  qr:     { x: 2,  y: 4 },
-  bc:     { x: 2,  y: 58 },
-  nm:     { x: 40, y: 8 },
-  cr:     { x: 40, y: 34 },
-  cod:    { x: 40, y: 72 },
-  taglia: { x: 78, y: 10 },
-  logo:   { x: 72, y: 52 }
-};
+var DEFAULT_LAYOUT = {};
+FIELDS.forEach(function(f){ DEFAULT_LAYOUT[f.key] = {x:f.x, y:f.y}; });
 var LAYOUT = loadLayout();
 
 function loadLayout(){
   try{
     var s = localStorage.getItem(LS_KEY);
     if(s){
-      var o = JSON.parse(s);
-      var merged = {};
-      for(var k in DEFAULT_LAYOUT){
-        merged[k] = (o[k] && typeof o[k].x==='number') ? o[k] : {x:DEFAULT_LAYOUT[k].x, y:DEFAULT_LAYOUT[k].y};
-      }
-      return merged;
+      var o = JSON.parse(s), m = {};
+      FIELDS.forEach(function(f){
+        m[f.key] = (o[f.key] && typeof o[f.key].x==='number') ? o[f.key] : {x:f.x, y:f.y};
+      });
+      return m;
     }
   }catch(e){}
   return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
 }
-function saveLayout(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(LAYOUT)); }catch(e){}
-}
+function saveLayout(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(LAYOUT)); }catch(e){} }
 
-// ---------- CSV ----------
+// ===== toolbar toggles =====
+(function buildToggles(){
+  var box = document.getElementById('toggles');
+  FIELDS.forEach(function(f){
+    var span = document.createElement('span'); span.className='chk';
+    var cb = document.createElement('input'); cb.type='checkbox'; cb.id='f_'+f.key; cb.checked=f.on;
+    var lb = document.createElement('label'); lb.htmlFor='f_'+f.key; lb.textContent=f.lab;
+    span.appendChild(cb); span.appendChild(lb); box.appendChild(span);
+    cb.addEventListener('change', render);
+  });
+})();
+
+// ===== CSV =====
 function parseCSV(text){
   if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
   var firstLine = text.split(/\r?\n/)[0] || '';
   var delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
-  var rows = [], cur = [], field = '', inQ = false;
+  var rows=[], cur=[], field='', inQ=false;
   for(var i=0;i<text.length;i++){
-    var ch = text[i];
-    if(inQ){
-      if(ch === '"'){ if(text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
-      else field += ch;
-    } else {
-      if(ch === '"') inQ = true;
-      else if(ch === delim){ cur.push(field); field=''; }
-      else if(ch === '\n'){ cur.push(field); rows.push(cur); cur=[]; field=''; }
-      else if(ch === '\r'){}
-      else field += ch;
-    }
+    var ch=text[i];
+    if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQ=false; } else field+=ch; }
+    else { if(ch==='"') inQ=true; else if(ch===delim){ cur.push(field); field=''; }
+           else if(ch==='\n'){ cur.push(field); rows.push(cur); cur=[]; field=''; }
+           else if(ch==='\r'){} else field+=ch; }
   }
   if(field.length || cur.length){ cur.push(field); rows.push(cur); }
+  return rowsToObjects(rows);
+}
+function rowsToObjects(rows){
   if(!rows.length) return [];
   var head = rows[0].map(function(h){ return (h||'').trim(); });
-  var out = [];
+  var out=[];
   for(var r=1;r<rows.length;r++){
-    if(rows[r].length === 1 && rows[r][0].trim() === '') continue;
-    var obj = {};
-    for(var c=0;c<head.length;c++){ obj[head[c]] = (rows[r][c]||'').trim(); }
+    if(rows[r].length===1 && (rows[r][0]||'').trim()==='') continue;
+    var obj={}; for(var c=0;c<head.length;c++){ obj[head[c]]=(rows[r][c]||'').trim(); }
     out.push(obj);
   }
   return out;
 }
 function get(row, names){
-  if(typeof names === 'string') names = [names];
-  var keys = Object.keys(row);
+  if(typeof names==='string') names=[names];
+  var keys=Object.keys(row);
   for(var n=0;n<names.length;n++){
-    var want = names[n].toLowerCase();
-    for(var k=0;k<keys.length;k++){ if(keys[k].toLowerCase() === want) return row[keys[k]]; }
-    for(var k2=0;k2<keys.length;k2++){ if(keys[k2].toLowerCase().indexOf(want) !== -1) return row[keys[k2]]; }
+    var want=names[n].toLowerCase();
+    for(var k=0;k<keys.length;k++){ if(keys[k].toLowerCase()===want) return row[keys[k]]; }
+    for(var k2=0;k2<keys.length;k2++){ if(keys[k2].toLowerCase().indexOf(want)!==-1) return row[keys[k2]]; }
   }
   return '';
 }
-function esc(s){
-  return String(s).replace(/[&<>"]/g, function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+// ===== PDF -> tabella =====
+async function parsePDF(arrbuf){
+  var pdf = await pdfjsLib.getDocument({data: arrbuf}).promise;
+  var allRows = [];
+  for(var p=1; p<=pdf.numPages; p++){
+    var page = await pdf.getPage(p);
+    var tc = await page.getTextContent();
+    // raggruppa gli item in righe per coordinata Y
+    var items = tc.items.filter(function(it){ return (it.str||'').trim()!==''; })
+      .map(function(it){ return { x: it.transform[4], y: Math.round(it.transform[5]), s: it.str.trim() }; });
+    if(!items.length) continue;
+    // ordina per Y decrescente (origine PDF in basso), poi X
+    var byY = {};
+    items.forEach(function(it){
+      var found=null;
+      for(var yk in byY){ if(Math.abs(yk - it.y) <= 3){ found=yk; break; } }
+      var key = found!==null ? found : it.y;
+      (byY[key] = byY[key] || []).push(it);
+    });
+    var lines = Object.keys(byY).map(Number).sort(function(a,b){ return b-a; })
+      .map(function(yk){ return byY[yk].sort(function(a,b){ return a.x-b.x; }); });
+    // raccogli i confini colonna (x di partenza) su tutta la pagina
+    var xs = [];
+    lines.forEach(function(ln){ ln.forEach(function(it){ xs.push(it.x); }); });
+    var cols = clusterX(xs, 18);
+    // costruisci la tabella
+    lines.forEach(function(ln){
+      var cells = new Array(cols.length).fill('');
+      ln.forEach(function(it){
+        var ci = nearestCol(cols, it.x);
+        cells[ci] = (cells[ci] ? cells[ci]+' ' : '') + it.s;
+      });
+      allRows.push(cells.map(function(c){ return c.trim(); }));
+    });
+  }
+  // togli righe totalmente vuote
+  allRows = allRows.filter(function(r){ return r.join('').trim()!==''; });
+  return rowsToObjects(allRows);
+}
+function clusterX(xs, tol){
+  var sorted = xs.slice().sort(function(a,b){ return a-b; });
+  var clusters = [];
+  sorted.forEach(function(x){
+    var last = clusters[clusters.length-1];
+    if(last && Math.abs(x - last.c) <= tol){ last.vals.push(x); last.c = avg(last.vals); }
+    else clusters.push({ c:x, vals:[x] });
   });
+  return clusters.map(function(c){ return c.c; });
+}
+function avg(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s/a.length; }
+function nearestCol(cols, x){
+  var best=0, bd=1e9;
+  for(var i=0;i<cols.length;i++){ var d=Math.abs(cols[i]-x); if(d<bd){ bd=d; best=i; } }
+  return best;
 }
 
-// ---------- costruzione singola etichetta ----------
-function buildLabel(row, hmm, largMm, flags){
-  var et = document.createElement('div');
-  et.className = 'et';
-  et.style.height = hmm + 'mm';
-
-  var codice  = get(row, ['CODICE','codice','barcode','matricola']);
-  var nome    = get(row, ['NOME E COGNOME','nome e cognome','nome','cognome']);
-  var cliente = get(row, ['AZIENDA','azienda','cliente']);
-  var reparto = get(row, ['REPARTO','reparto']);
-  var taglia  = get(row, ['TAGLIA','taglia','size']);
+// ===== etichetta =====
+function fieldValue(f, row){
+  if(!f.cols) return '';
+  return get(row, f.cols);
+}
+function buildLabel(row, hmm, largMm){
+  var et=document.createElement('div'); et.className='et'; et.style.height=hmm+'mm';
+  var codice = get(row, ['CODICE','codice','barcode','matricola']);
 
   function place(el, key){
-    el.classList.add('el');
-    el.dataset.key = key;
-    el.style.left = LAYOUT[key].x + '%';
-    el.style.top  = LAYOUT[key].y + '%';
+    el.classList.add('el'); el.dataset.key=key;
+    el.style.left=LAYOUT[key].x+'%'; el.style.top=LAYOUT[key].y+'%';
     et.appendChild(el);
   }
 
-  // QR
-  if(flags.qr && codice){
-    var qd = document.createElement('div'); qd.className='qrbox';
-    try{
-      var qr = qrcode(0,'M'); qr.addData(codice); qr.make();
-      var qrSize = Math.max(10, Math.min(hmm - 10, 22));
-      qd.innerHTML = qr.createSvgTag({cellSize:2, margin:0, scalable:true});
-      var qsvg = qd.querySelector('svg');
-      if(qsvg){ qsvg.style.width=qrSize+'mm'; qsvg.style.height=qrSize+'mm'; }
-    }catch(e){}
-    place(qd,'qr');
-  }
-  // Barcode
-  if(flags.bc && codice){
-    var bd = document.createElement('div'); bd.className='bcbox';
-    var bsvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-    bd.appendChild(bsvg);
-    try{
-      JsBarcode(bsvg, String(codice), {format:'CODE128', displayValue:false, height:34, margin:0, width:1.4});
-      bsvg.style.width = Math.min(largMm*0.5, 34) + 'mm';
-      bsvg.style.height = '8mm';
-    }catch(e){}
-    place(bd,'bc');
-  }
-  // Nome
-  if(flags.nm && nome){
-    var nm = document.createElement('div'); nm.className='nm';
-    nm.style.maxWidth = (largMm*0.55)+'mm';
-    nm.textContent = nome;
-    place(nm,'nm');
-  }
-  // Cliente · reparto
-  var crParts = [];
-  if(flags.cli && cliente) crParts.push('<b>'+esc(cliente)+'</b>');
-  if(flags.rep && reparto) crParts.push(esc(reparto));
-  if(crParts.length){
-    var cr = document.createElement('div'); cr.className='cr';
-    cr.style.maxWidth = (largMm*0.55)+'mm';
-    cr.innerHTML = crParts.join(' · ');
-    place(cr,'cr');
-  }
-  // Codice testo
-  if(codice){
-    var cd = document.createElement('div'); cd.className='cod';
-    cd.textContent = codice;
-    place(cd,'cod');
-  }
-  // Taglia
-  if(flags.tag && taglia){
-    var tg = document.createElement('div'); tg.className='taglia';
-    tg.innerHTML = '<div class="lbl">Taglia</div><div class="val">'+esc(taglia)+'</div>';
-    place(tg,'taglia');
-  }
-  // Logo
-  if(flags.logo && LOGO){
-    var lg = document.createElement('div'); lg.className='logo';
-    var img = document.createElement('img'); img.src = LOGO;
-    img.style.maxHeight = Math.min((hmm/2), 16) + 'mm';
-    img.style.maxWidth = '20mm';
-    lg.appendChild(img);
-    place(lg,'logo');
-  }
+  FIELDS.forEach(function(f){
+    var cb = document.getElementById('f_'+f.key);
+    if(!cb || !cb.checked) return;
+
+    if(f.kind==='qr'){
+      if(!codice) return;
+      var qd=document.createElement('div'); qd.className='qrbox';
+      try{ var qr=qrcode(0,'M'); qr.addData(codice); qr.make();
+        var qrSize=Math.max(10, Math.min(hmm-10,22));
+        qd.innerHTML=qr.createSvgTag({cellSize:2,margin:0,scalable:true});
+        var qsvg=qd.querySelector('svg'); if(qsvg){ qsvg.style.width=qrSize+'mm'; qsvg.style.height=qrSize+'mm'; }
+      }catch(e){}
+      place(qd,'qr');
+    }
+    else if(f.kind==='bc'){
+      if(!codice) return;
+      var bd=document.createElement('div'); bd.className='bcbox';
+      var bsvg=document.createElementNS('http://www.w3.org/2000/svg','svg'); bd.appendChild(bsvg);
+      try{ JsBarcode(bsvg,String(codice),{format:'CODE128',displayValue:false,height:34,margin:0,width:1.4});
+        bsvg.style.width=Math.min(largMm*0.5,34)+'mm'; bsvg.style.height='8mm';
+      }catch(e){}
+      place(bd,'bc');
+    }
+    else if(f.kind==='taglia'){
+      var v=fieldValue(f,row); if(!v) return;
+      var tg=document.createElement('div'); tg.className='taglia';
+      tg.innerHTML='<div class="lbl">Taglia</div><div class="val">'+esc(v)+'</div>';
+      place(tg,'taglia');
+    }
+    else if(f.kind==='logo'){
+      if(!LOGO) return;
+      var lg=document.createElement('div'); lg.className='logo';
+      var img=document.createElement('img'); img.src=LOGO;
+      img.style.maxHeight=Math.min(hmm/2,16)+'mm'; img.style.maxWidth='20mm';
+      lg.appendChild(img); place(lg,'logo');
+    }
+    else { // text
+      var val=fieldValue(f,row); if(!val) return;
+      var d=document.createElement('div'); d.className='txt'+(f.strong?' strong':'');
+      d.style.maxWidth=(largMm*0.58)+'mm';
+      d.style.whiteSpace='nowrap'; d.style.overflow='hidden'; d.style.textOverflow='ellipsis';
+      d.innerHTML = (f.prefix ? '<span class="k">'+esc(f.prefix)+': </span>' : '') + esc(val);
+      place(d,f.key);
+    }
+  });
 
   return et;
 }
 
-// ---------- render ----------
+// ===== render =====
 function render(){
-  var out = document.getElementById('out');
-  out.innerHTML = '';
-  if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
+  var out=document.getElementById('out'); out.innerHTML='';
+  var copie=parseInt(document.getElementById('copie').value,10)||1;
 
-  var copie = parseInt(document.getElementById('copie').value,10) || 1;
-  var formato = document.getElementById('formato').value;
-
-  var flags = {
-    qr: document.getElementById('fQr').checked,
-    bc: document.getElementById('fBc').checked,
-    nm: document.getElementById('fNm').checked,
-    cli:document.getElementById('fCli').checked,
-    rep:document.getElementById('fRep').checked,
-    tag:document.getElementById('fTag').checked,
-    logo:document.getElementById('fLogo').checked && !!LOGO
-  };
-
-  var items = [];
-  for(var i=0;i<ROWS.length;i++){ for(var c=0;c<copie;c++) items.push(ROWS[i]); }
-
-  if(formato === 'rotolo'){
-    renderRotolo(out, items, flags);
-  } else {
-    renderA4(out, items, flags);
+  if(MODE==='pdfimg'){
+    if(!PDFIMG.length){ document.getElementById('count').textContent=''; return; }
+    var imgs=[]; for(var i=0;i<PDFIMG.length;i++){ for(var c=0;c<copie;c++) imgs.push(PDFIMG[i]); }
+    if(document.getElementById('formato').value==='rotolo') renderImagesRotolo(out, imgs);
+    else renderImagesA4(out, imgs);
+    return;
   }
+
+  if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
+  var items=[]; for(var j=0;j<ROWS.length;j++){ for(var c2=0;c2<copie;c2++) items.push(ROWS[j]); }
+  if(document.getElementById('formato').value==='rotolo') renderRotolo(out, items);
+  else renderA4(out, items);
 }
 
-function renderA4(out, items, flags){
-  var perRiga = parseInt(document.getElementById('perRiga').value,10) || 3;
-  var hmm     = parseInt(document.getElementById('hmm').value,10) || 40;
-
-  // @page A4
-  document.getElementById('pageStyle').textContent = '@page { size:A4; margin:0; }';
-
-  var largMm = ((210 - 12) / perRiga) - 3;
-  var perColonna = Math.max(1, Math.floor((297 - 16) / (hmm + 3)));
-  var perFoglio = perRiga * perColonna;
-
-  var foglio = null;
-  for(var idx=0; idx<items.length; idx++){
-    if(idx % perFoglio === 0){
-      foglio = document.createElement('div');
-      foglio.className = 'foglio';
-      foglio.style.gridTemplateColumns = 'repeat(' + perRiga + ', ' + largMm + 'mm)';
-      out.appendChild(foglio);
-    }
-    var et = buildLabel(items[idx], hmm, largMm, flags);
-    if(EDIT && idx === 0){ et.classList.add('editable'); makeDraggable(et); }
+// ---- ristampa PDF come immagini ----
+function imgLabel(src, hmm){
+  var et=document.createElement('div'); et.className='et'; et.style.height=hmm+'mm';
+  et.style.display='flex'; et.style.alignItems='center'; et.style.justifyContent='center';
+  var img=document.createElement('img'); img.src=src;
+  img.style.maxWidth='100%'; img.style.maxHeight='100%'; img.style.objectFit='contain';
+  et.appendChild(img); return et;
+}
+function renderImagesA4(out, imgs){
+  var perRiga=parseInt(document.getElementById('perRiga').value,10)||3;
+  var hmm=parseInt(document.getElementById('hmm').value,10)||40;
+  document.getElementById('pageStyle').textContent='@page { size:A4; margin:0; }';
+  var largMm=((210-12)/perRiga)-3;
+  var perColonna=Math.max(1,Math.floor((297-16)/(hmm+3)));
+  var perFoglio=perRiga*perColonna, foglio=null;
+  for(var idx=0;idx<imgs.length;idx++){
+    if(idx%perFoglio===0){ foglio=document.createElement('div'); foglio.className='foglio';
+      foglio.style.gridTemplateColumns='repeat('+perRiga+', '+largMm+'mm)'; out.appendChild(foglio); }
+    foglio.appendChild(imgLabel(imgs[idx],hmm));
+  }
+  document.getElementById('count').textContent='ristampa PDF · '+imgs.length+' etichette · '+out.childNodes.length+' foglio/i';
+}
+function renderImagesRotolo(out, imgs){
+  var W=parseInt(document.getElementById('rollW').value,10)||60;
+  var H=parseInt(document.getElementById('rollH').value,10)||40;
+  var gap=parseInt(document.getElementById('rollGap').value,10); if(isNaN(gap)) gap=0;
+  document.getElementById('pageStyle').textContent='@page { size:'+W+'mm '+(H+gap)+'mm; margin:0; }';
+  for(var idx=0;idx<imgs.length;idx++){
+    var wrap=document.createElement('div'); wrap.className='rotolo';
+    wrap.style.width=W+'mm'; wrap.style.height=H+'mm';
+    wrap.appendChild(imgLabel(imgs[idx],H)); out.appendChild(wrap);
+  }
+  document.getElementById('count').textContent='ristampa PDF · '+imgs.length+' etichette · rotolo '+W+'×'+H+' mm';
+}
+function renderA4(out, items){
+  var perRiga=parseInt(document.getElementById('perRiga').value,10)||3;
+  var hmm=parseInt(document.getElementById('hmm').value,10)||40;
+  document.getElementById('pageStyle').textContent='@page { size:A4; margin:0; }';
+  var largMm=((210-12)/perRiga)-3;
+  var perColonna=Math.max(1,Math.floor((297-16)/(hmm+3)));
+  var perFoglio=perRiga*perColonna, foglio=null;
+  for(var idx=0;idx<items.length;idx++){
+    if(idx%perFoglio===0){ foglio=document.createElement('div'); foglio.className='foglio';
+      foglio.style.gridTemplateColumns='repeat('+perRiga+', '+largMm+'mm)'; out.appendChild(foglio); }
+    var et=buildLabel(items[idx],hmm,largMm);
+    if(EDIT && idx===0){ et.classList.add('editable'); makeDraggable(et); }
     foglio.appendChild(et);
   }
-  document.getElementById('count').textContent =
-    items.length + ' etichette · ' + out.childNodes.length + ' foglio/i';
+  document.getElementById('count').textContent=items.length+' etichette · '+out.childNodes.length+' foglio/i';
 }
-
-function renderRotolo(out, items, flags){
-  var W = parseInt(document.getElementById('rollW').value,10) || 60;
-  var H = parseInt(document.getElementById('rollH').value,10) || 40;
-  var gap = parseInt(document.getElementById('rollGap').value,10); if(isNaN(gap)) gap = 0;
-
-  // @page = misura esatta etichetta + gap (il gap fa avanzare la carta tra una etichetta e l'altra)
-  document.getElementById('pageStyle').textContent =
-    '@page { size:' + W + 'mm ' + (H + gap) + 'mm; margin:0; }';
-
-  for(var idx=0; idx<items.length; idx++){
-    var wrap = document.createElement('div');
-    wrap.className = 'rotolo';
-    wrap.style.width  = W + 'mm';
-    wrap.style.height = H + 'mm';
-    var et = buildLabel(items[idx], H, W, flags);
-    if(EDIT && idx === 0){ et.classList.add('editable'); makeDraggable(et); }
-    wrap.appendChild(et);
-    out.appendChild(wrap);
+function renderRotolo(out, items){
+  var W=parseInt(document.getElementById('rollW').value,10)||60;
+  var H=parseInt(document.getElementById('rollH').value,10)||40;
+  var gap=parseInt(document.getElementById('rollGap').value,10); if(isNaN(gap)) gap=0;
+  document.getElementById('pageStyle').textContent='@page { size:'+W+'mm '+(H+gap)+'mm; margin:0; }';
+  for(var idx=0;idx<items.length;idx++){
+    var wrap=document.createElement('div'); wrap.className='rotolo';
+    wrap.style.width=W+'mm'; wrap.style.height=H+'mm';
+    var et=buildLabel(items[idx],H,W);
+    if(EDIT && idx===0){ et.classList.add('editable'); makeDraggable(et); }
+    wrap.appendChild(et); out.appendChild(wrap);
   }
-  document.getElementById('count').textContent =
-    items.length + ' etichette · rotolo ' + W + '×' + H + ' mm';
+  document.getElementById('count').textContent=items.length+' etichette · rotolo '+W+'×'+H+' mm';
 }
-
 function updateFormatoUI(){
-  var roll = document.getElementById('formato').value === 'rotolo';
-  document.querySelectorAll('.a4only').forEach(function(e){ e.style.display = roll ? 'none' : ''; });
-  document.querySelectorAll('.rollonly').forEach(function(e){ e.style.display = roll ? '' : 'none'; });
+  var roll=document.getElementById('formato').value==='rotolo';
+  document.querySelectorAll('.a4only').forEach(function(e){ e.style.display=roll?'none':''; });
+  document.querySelectorAll('.rollonly').forEach(function(e){ e.style.display=roll?'':'none'; });
 }
 
-// ---------- drag & drop nella prima etichetta ----------
+// ===== drag =====
 function makeDraggable(et){
-  var els = et.querySelectorAll('.el');
-  els.forEach(function(el){
+  et.querySelectorAll('.el').forEach(function(el){
     el.addEventListener('mousedown', function(ev){
       ev.preventDefault();
-      var key = el.dataset.key;
-      var rect = et.getBoundingClientRect();
-      var startX = ev.clientX, startY = ev.clientY;
-      var startLeft = LAYOUT[key].x, startTop = LAYOUT[key].y;
+      var key=el.dataset.key, rect=et.getBoundingClientRect();
+      var sx=ev.clientX, sy=ev.clientY, sl=LAYOUT[key].x, st=LAYOUT[key].y;
       el.classList.add('dragging');
-
       function move(e){
-        var dxPct = ((e.clientX - startX) / rect.width) * 100;
-        var dyPct = ((e.clientY - startY) / rect.height) * 100;
-        var nx = Math.max(-2, Math.min(98, startLeft + dxPct));
-        var ny = Math.max(-2, Math.min(98, startTop + dyPct));
-        LAYOUT[key].x = Math.round(nx*10)/10;
-        LAYOUT[key].y = Math.round(ny*10)/10;
-        el.style.left = LAYOUT[key].x + '%';
-        el.style.top  = LAYOUT[key].y + '%';
+        var dx=((e.clientX-sx)/rect.width)*100, dy=((e.clientY-sy)/rect.height)*100;
+        LAYOUT[key].x=Math.round(Math.max(-2,Math.min(98,sl+dx))*10)/10;
+        LAYOUT[key].y=Math.round(Math.max(-2,Math.min(98,st+dy))*10)/10;
+        el.style.left=LAYOUT[key].x+'%'; el.style.top=LAYOUT[key].y+'%';
       }
-      function up(){
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', up);
-        el.classList.remove('dragging');
-        saveLayout();
-        applyLayoutToAll();
-      }
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
+      function up(){ document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up);
+        el.classList.remove('dragging'); saveLayout(); applyLayoutToAll(); }
+      document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
     });
   });
 }
-
-// aggiorna la posizione degli stessi elementi su tutte le etichette (senza ricostruire)
 function applyLayoutToAll(){
-  var allEt = document.querySelectorAll('#out .et');
-  allEt.forEach(function(et){
-    var els = et.querySelectorAll('.el');
-    els.forEach(function(el){
-      var k = el.dataset.key;
-      if(LAYOUT[k]){ el.style.left = LAYOUT[k].x + '%'; el.style.top = LAYOUT[k].y + '%'; }
+  document.querySelectorAll('#out .et').forEach(function(et){
+    et.querySelectorAll('.el').forEach(function(el){
+      var k=el.dataset.key; if(LAYOUT[k]){ el.style.left=LAYOUT[k].x+'%'; el.style.top=LAYOUT[k].y+'%'; }
     });
   });
 }
 
-// ---------- file ----------
+// ===== file input =====
+function isPDF(f){ return /\.pdf$/i.test(f.name) || f.type==='application/pdf'; }
 function handleFile(f){
   if(!f) return;
-  var reader = new FileReader();
-  reader.onload = function(e){
-    ROWS = parseCSV(e.target.result);
-    document.getElementById('drop').style.display = ROWS.length ? 'none' : 'block';
+  if(isPDF(f)){
+    if(!window.pdfjsLib){ alert('Libreria PDF non caricata. Riprova online.'); return; }
+    document.getElementById('busy').style.display='block';
+    document.getElementById('drop').style.display='none';
+    var reader=new FileReader();
+    reader.onload=function(e){ handlePDF(e.target.result); };
+    reader.readAsArrayBuffer(f);
+  } else {
+    MODE='data'; PDFIMG=[];
+    var reader=new FileReader();
+    reader.onload=function(e){
+      ROWS=parseCSV(e.target.result);
+      document.getElementById('drop').style.display=ROWS.length?'none':'block';
+      render();
+      if(!ROWS.length) alert('Nessuna riga trovata nel CSV.');
+    };
+    reader.readAsText(f,'UTF-8');
+  }
+}
+
+async function handlePDF(arrbuf){
+  var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
+  try{
+    var pdf=await pdfjsLib.getDocument({data:arrbuf}).promise;
+    // 1) prova a leggere testo tabellare
+    var rows=await extractTableFromPdf(pdf);
+    var hasText = rows.length>0 && Object.keys(rows[0]||{}).some(function(k){ return k && k.trim()!==''; });
+    if(hasText){
+      MODE='data'; PDFIMG=[]; ROWS=rows;
+      busy.style.display='none'; dropEl.style.display='none'; render();
+      return;
+    }
+    // 2) nessun testo -> ristampa le pagine come immagini
+    var res=await pdfPagesToImages(pdf);
+    MODE='pdfimg'; PDFIMG=res.imgs; ROWS=[];
+    // prefill misura rotolo con la dimensione reale della pagina PDF (pt -> mm)
+    if(res.wpt && res.hpt){
+      var wmm=Math.round(res.wpt/2.834), hmm=Math.round(res.hpt/2.834);
+      document.getElementById('rollW').value=wmm;
+      document.getElementById('rollH').value=hmm;
+    }
+    busy.style.display='none'; dropEl.style.display='none';
     render();
-    if(!ROWS.length) alert('Nessuna riga trovata nel CSV. Controlla il file.');
-  };
-  reader.readAsText(f, 'UTF-8');
+  }catch(err){
+    busy.style.display='none'; dropEl.style.display='block';
+    alert('Errore nella lettura del PDF: '+(err&&err.message)+'\nProva con il CSV.');
+  }
+}
+
+async function pdfPagesToImages(pdf){
+  var imgs=[], wpt=0, hpt=0;
+  for(var i=1;i<=pdf.numPages;i++){
+    var page=await pdf.getPage(i);
+    if(i===1){ var v1=page.getViewport({scale:1}); wpt=v1.width; hpt=v1.height; }
+    var vp=page.getViewport({scale:3});
+    var canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+    imgs.push(canvas.toDataURL('image/png'));
+  }
+  return {imgs:imgs, wpt:wpt, hpt:hpt};
 }
 function handleImg(f){
   if(!f) return;
-  var reader = new FileReader();
-  reader.onload = function(e){
-    LOGO = e.target.result;
-    document.getElementById('logoName').textContent = f.name;
-    document.getElementById('fLogo').checked = true;
-    render();
-  };
+  var reader=new FileReader();
+  reader.onload=function(e){ LOGO=e.target.result; document.getElementById('logoName').textContent=f.name;
+    document.getElementById('f_logo').checked=true; render(); };
   reader.readAsDataURL(f);
 }
 
-// ---------- eventi ----------
-var drop = document.getElementById('drop');
-var fileInput = document.getElementById('file');
-var imgInput = document.getElementById('imgInput');
-
+// ===== eventi =====
+var drop=document.getElementById('drop'), fileInput=document.getElementById('file'), imgInput=document.getElementById('imgInput');
 drop.addEventListener('click', function(){ fileInput.click(); });
 fileInput.addEventListener('change', function(){ handleFile(this.files[0]); });
 document.getElementById('btnImg').addEventListener('click', function(){ imgInput.click(); });
@@ -532,41 +568,28 @@ imgInput.addEventListener('change', function(){ handleImg(this.files[0]); });
 
 drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('hover'); });
 drop.addEventListener('dragleave', function(){ drop.classList.remove('hover'); });
-drop.addEventListener('drop', function(e){
-  e.preventDefault(); drop.classList.remove('hover');
-  if(e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
+drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('hover');
+  if(e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
 window.addEventListener('dragover', function(e){ e.preventDefault(); });
-window.addEventListener('drop', function(e){
-  e.preventDefault();
-  if(e.dataTransfer.files && e.dataTransfer.files.length && !ROWS.length) handleFile(e.dataTransfer.files[0]);
-});
+window.addEventListener('drop', function(e){ e.preventDefault();
+  if(e.dataTransfer.files && e.dataTransfer.files.length && !ROWS.length) handleFile(e.dataTransfer.files[0]); });
 
-['perRiga','hmm','copie','rollW','rollH','rollGap','fQr','fBc','fNm','fCli','fRep','fTag','fLogo'].forEach(function(id){
+['perRiga','hmm','copie','rollW','rollH','rollGap'].forEach(function(id){
   document.getElementById(id).addEventListener('change', render);
 });
-document.getElementById('formato').addEventListener('change', function(){
-  updateFormatoUI(); render();
-});
-updateFormatoUI();
-
+document.getElementById('formato').addEventListener('change', function(){ updateFormatoUI(); render(); });
 document.getElementById('btnEdit').addEventListener('click', function(){
-  EDIT = !EDIT;
-  document.body.classList.toggle('editing', EDIT);
-  this.classList.toggle('on', EDIT);
-  this.textContent = EDIT ? '✅ Fine modifica' : '✏️ Sposta elementi';
-  render();
+  EDIT=!EDIT; document.body.classList.toggle('editing',EDIT); this.classList.toggle('on',EDIT);
+  this.textContent=EDIT?'✅ Fine modifica':'✏️ Sposta elementi'; render();
 });
 document.getElementById('btnReset').addEventListener('click', function(){
-  LAYOUT = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
-  saveLayout(); render();
+  LAYOUT=JSON.parse(JSON.stringify(DEFAULT_LAYOUT)); saveLayout(); render();
 });
 document.getElementById('btnPrint').addEventListener('click', function(){ window.print(); });
 document.getElementById('btnNew').addEventListener('click', function(){
-  ROWS = []; fileInput.value = '';
-  document.getElementById('drop').style.display = 'block';
-  render();
+  ROWS=[]; fileInput.value=''; document.getElementById('drop').style.display='block'; render();
 });
+updateFormatoUI();
 </script>
 </body>
 </html>
