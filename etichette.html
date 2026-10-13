@@ -58,16 +58,18 @@
   .et { position:relative; border:1px solid #cbd5e1; border-radius:2mm; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
   .el { position:absolute; }
   .el .qrbox svg, .el .bcbox svg { display:block; }
-  .el.txt { font-size:2.8mm; line-height:1.15; color:#1e293b; }
+  .el.txt { font-size:2.8mm; line-height:1.15; color:#1e293b; white-space:normal; word-break:break-word; overflow:hidden; }
   .el.txt.strong { font-weight:700; color:#0f172a; }
   .el.txt .k { color:#64748b; font-weight:600; }
+  .el[contenteditable="true"]{ outline:1px dashed #2563eb; cursor:text; }
+  .rzh { position:absolute; right:-4px; bottom:-4px; width:10px; height:10px; background:#16a34a; border:1px solid #fff; border-radius:2px; cursor:nwse-resize; z-index:40; }
   .el.taglia { text-align:center; line-height:1; border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm; }
   .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
   .el.taglia .val { font-size:5.2mm; font-weight:800; }
   .el.logo img { display:block; object-fit:contain; }
 
   .et.editable { outline:2px solid #16a34a; }
-  .et.editable .el { cursor:move; outline:1px dashed #94a3b8; border-radius:1mm; }
+  .et.editable .el { cursor:move; outline:1px dashed #94a3b8; border-radius:1mm; overflow:visible; }
   .et.editable .el:hover { outline-color:#16a34a; background:rgba(22,163,74,.06); }
   .et.editable .el.dragging { outline:2px solid #16a34a; background:rgba(22,163,74,.12); z-index:30; }
 
@@ -84,6 +86,7 @@
     .rotolo .et { border:none; }
     .et.editable { outline:none; }
     .et.editable .el { outline:none !important; background:none !important; }
+    .rzh { display:none !important; }
   }
 </style>
 <style id="pageStyle">@page { size:A4; margin:0; }</style>
@@ -124,7 +127,8 @@
 
   <button class="imgbtn" id="btnImg">🖼️ Immagine</button>
   <span id="logoName"></span>
-  <button class="editbtn" id="btnEdit">✏️ Sposta elementi</button>
+  <button class="editbtn" id="btnEdit">✏️ Sposta/ridimensiona</button>
+  <button class="ghost" id="btnData">📝 Dati</button>
   <button id="btnPrint">🖨️ Stampa</button>
   <button class="ghost" id="btnNew">📂 Altro file</button>
   <span id="count"></span>
@@ -132,7 +136,7 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde). La disposizione si applica a tutte e viene salvata. <i>(Nella ristampa PDF il testo del PDF è fisso: puoi spostare solo il logo/immagine che aggiungi.)</i>
+  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
@@ -143,6 +147,11 @@
   <input type="file" id="file" accept=".csv,text/csv,.pdf,application/pdf" style="display:none">
 </div>
 <div id="busy">⏳ Conversione PDF in corso…</div>
+
+<div id="grid" style="display:none; padding:12px 18px; background:#fff; border-bottom:1px solid #e2e8f0; overflow:auto; max-height:40vh;">
+  <div style="font-size:13px; color:#475569; margin-bottom:8px;">📝 <b>Modifica dati</b> — correggi o aggiungi i valori. Le etichette si aggiornano subito. (Il barcode usa il campo <b>Codice</b>.)</div>
+  <div id="gridWrap"></div>
+</div>
 
 <div id="out"></div>
 
@@ -179,7 +188,7 @@ var EDIT = false;
 var MODE = 'data';     // 'data' (CSV / PDF con testo) | 'pdfimg' (PDF già impaginato)
 var PDFIMG = [];       // immagini pagine PDF (data URL)
 var CSVROWS = [];      // CSV completo caricato (master per l'aggancio OCR)
-var LS_KEY = 'myc_etichetta_layout_v3';
+var LS_KEY = 'myc_etichetta_layout_v4';
 
 var DEFAULT_LAYOUT = {};
 FIELDS.forEach(function(f){ DEFAULT_LAYOUT[f.key] = {x:f.x, y:f.y}; });
@@ -325,6 +334,9 @@ function buildLabel(row, hmm, largMm){
   function place(el, key){
     el.classList.add('el'); el.dataset.key=key;
     el.style.left=LAYOUT[key].x+'%'; el.style.top=LAYOUT[key].y+'%';
+    // scala per QR / barcode / logo / taglia
+    var s = LAYOUT[key] && LAYOUT[key].s;
+    if(s && s!==1){ el.style.transform='scale('+s+')'; el.style.transformOrigin='top left'; }
     et.appendChild(el);
   }
 
@@ -367,8 +379,8 @@ function buildLabel(row, hmm, largMm){
     else { // text
       var val=fieldValue(f,row); if(!val) return;
       var d=document.createElement('div'); d.className='txt'+(f.strong?' strong':'');
-      d.style.maxWidth=(largMm*0.58)+'mm';
-      d.style.whiteSpace='nowrap'; d.style.overflow='hidden'; d.style.textOverflow='ellipsis';
+      var wPct = (LAYOUT[f.key] && LAYOUT[f.key].w) || 55;
+      d.style.width = wPct+'%';   // il testo va a capo dentro questa larghezza (niente taglio)
       d.innerHTML = (f.prefix ? '<span class="k">'+esc(f.prefix)+': </span>' : '') + esc(val);
       place(d,f.key);
     }
@@ -498,9 +510,12 @@ function updateFormatoUI(){
 // ===== drag =====
 function makeDraggable(et){
   et.querySelectorAll('.el').forEach(function(el){
+    var key=el.dataset.key;
+    // --- SPOSTAMENTO ---
     el.addEventListener('mousedown', function(ev){
+      if(ev.target.classList && ev.target.classList.contains('rzh')) return; // la maniglia gestisce il resize
       ev.preventDefault();
-      var key=el.dataset.key, rect=et.getBoundingClientRect();
+      var rect=et.getBoundingClientRect();
       var sx=ev.clientX, sy=ev.clientY, sl=LAYOUT[key].x, st=LAYOUT[key].y;
       el.classList.add('dragging');
       function move(e){
@@ -513,12 +528,94 @@ function makeDraggable(et){
         el.classList.remove('dragging'); saveLayout(); applyLayoutToAll(); }
       document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
     });
+    // --- MANIGLIA DI RIDIMENSIONAMENTO ---
+    var h=document.createElement('div'); h.className='rzh'; el.appendChild(h);
+    var isText = el.classList.contains('txt');
+    h.addEventListener('mousedown', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      var rect=et.getBoundingClientRect();
+      var sx=ev.clientX;
+      var startW = (LAYOUT[key].w || (isText?55:0));
+      var startS = (LAYOUT[key].s || 1);
+      function move(e){
+        var dxPx = e.clientX - sx;
+        if(isText){
+          var dxPct = (dxPx/rect.width)*100;
+          var w = Math.max(10, Math.min(98, startW + dxPct));
+          LAYOUT[key].w = Math.round(w*10)/10;
+          el.style.width = LAYOUT[key].w + '%';
+        } else {
+          var s = Math.max(0.3, Math.min(5, startS + dxPx/90));
+          LAYOUT[key].s = Math.round(s*100)/100;
+          el.style.transform='scale('+LAYOUT[key].s+')'; el.style.transformOrigin='top left';
+        }
+      }
+      function up(){ document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up);
+        saveLayout(); render(); }
+      document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
+    });
   });
 }
 function applyLayoutToAll(){
   document.querySelectorAll('#out .et').forEach(function(et){
     et.querySelectorAll('.el').forEach(function(el){
-      var k=el.dataset.key; if(LAYOUT[k]){ el.style.left=LAYOUT[k].x+'%'; el.style.top=LAYOUT[k].y+'%'; }
+      var k=el.dataset.key; if(!LAYOUT[k]) return;
+      el.style.left=LAYOUT[k].x+'%'; el.style.top=LAYOUT[k].y+'%';
+      if(el.classList.contains('txt') && LAYOUT[k].w) el.style.width=LAYOUT[k].w+'%';
+      if(LAYOUT[k].s && LAYOUT[k].s!==1){ el.style.transform='scale('+LAYOUT[k].s+')'; el.style.transformOrigin='top left'; }
+    });
+  });
+}
+
+// ===== pannello Modifica dati =====
+var GRID_COLS = [
+  {key:'codice', lab:'Codice'},
+  {key:'nome', lab:'Nome', col:'fullname'},
+  {key:'azienda', lab:'Azienda', col:'azienda'},
+  {key:'reparto', lab:'Reparto', col:'reparto'},
+  {key:'taglia', lab:'Taglia', col:'taglia'},
+  {key:'tipo', lab:'Tipo', col:'tipo'},
+  {key:'data', lab:'Data', col:'created_at'},
+  {key:'armadio', lab:'Armadio', col:'armadio'},
+  {key:'posizione', lab:'Posizione', col:'posizione'},
+  {key:'matricola', lab:'Matricola', col:'matricola'},
+  {key:'iniziali', lab:'Iniziali', col:'iniziali'},
+  {key:'lotto', lab:'Lotto', col:'lotto'},
+  {key:'note', lab:'Note', col:'note'}
+];
+var GRID_READ = {
+  codice:['barcode','codice','CODICE'], nome:['fullname','NOME E COGNOME','nome'],
+  azienda:['azienda','AZIENDA'], reparto:['reparto','REPARTO'], taglia:['taglia','TAGLIA'],
+  tipo:['tipo','TIPO'], data:['created_at','DATA'], armadio:['armadio','ARMADIO'],
+  posizione:['posizione','POSIZIONE'], matricola:['matricola','MATRICOLA'],
+  iniziali:['iniziali','INIZIALI'], lotto:['lotto','LOTTO'], note:['note','NOTE']
+};
+var GRID_WRITE = { codice:'codice', nome:'fullname', azienda:'azienda', reparto:'reparto',
+  taglia:'taglia', tipo:'tipo', data:'created_at', armadio:'armadio', posizione:'posizione',
+  matricola:'matricola', iniziali:'iniziali', lotto:'lotto', note:'note' };
+
+function buildGrid(){
+  var wrap=document.getElementById('gridWrap');
+  if(MODE!=='data' || !ROWS.length){ wrap.innerHTML='<div style="color:#94a3b8;font-size:13px">Carica un CSV o un PDF per modificare i dati.</div>'; return; }
+  var html='<table style="border-collapse:collapse;font-size:12px;width:100%"><thead><tr>';
+  html+='<th style="position:sticky;left:0;background:#f1f5f9;padding:4px 6px;border:1px solid #e2e8f0">#</th>';
+  GRID_COLS.forEach(function(c){ html+='<th style="padding:4px 6px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:left">'+c.lab+'</th>'; });
+  html+='</tr></thead><tbody>';
+  ROWS.forEach(function(row, ri){
+    html+='<tr><td style="position:sticky;left:0;background:#f8fafc;padding:3px 6px;border:1px solid #e2e8f0;color:#64748b">'+(ri+1)+'</td>';
+    GRID_COLS.forEach(function(c){
+      var v = cleanVal(get(row, GRID_READ[c.key]));
+      html+='<td style="padding:0;border:1px solid #e2e8f0"><input data-ri="'+ri+'" data-ck="'+c.key+'" value="'+esc(v).replace(/"/g,'&quot;')+'" style="border:none;padding:3px 6px;width:120px;font-size:12px;background:transparent"></td>';
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('input').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      var ri=+this.dataset.ri, ck=this.dataset.ck;
+      ROWS[ri][GRID_WRITE[ck]] = this.value;  // override: get() legge per primo questo campo
+      render();
     });
   });
 }
@@ -770,7 +867,14 @@ document.getElementById('filtro').addEventListener('input', render);
 document.getElementById('formato').addEventListener('change', function(){ updateFormatoUI(); render(); });
 document.getElementById('btnEdit').addEventListener('click', function(){
   EDIT=!EDIT; document.body.classList.toggle('editing',EDIT); this.classList.toggle('on',EDIT);
-  this.textContent=EDIT?'✅ Fine modifica':'✏️ Sposta elementi'; render();
+  this.textContent=EDIT?'✅ Fine modifica':'✏️ Sposta/ridimensiona'; render();
+});
+document.getElementById('btnData').addEventListener('click', function(){
+  var g=document.getElementById('grid');
+  var show = g.style.display==='none';
+  g.style.display = show?'block':'none';
+  this.classList.toggle('on', show);
+  if(show) buildGrid();
 });
 document.getElementById('btnReset').addEventListener('click', function(){
   LAYOUT=JSON.parse(JSON.stringify(DEFAULT_LAYOUT)); saveLayout(); render();
