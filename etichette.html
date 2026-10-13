@@ -126,6 +126,7 @@
   <span id="toggles"></span>
 
   <button class="imgbtn" id="btnImg">🖼️ Immagine</button>
+  <button class="imgbtn" id="btnText">➕ Testo</button>
   <span id="logoName"></span>
   <button class="editbtn" id="btnEdit">✏️ Sposta/ridimensiona</button>
   <button class="ghost" id="btnData">📝 Dati</button>
@@ -136,7 +137,7 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
+  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. I <b>testi liberi</b> si modificano/eliminano con <b>doppio click</b>. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
@@ -198,16 +199,23 @@ function loadLayout(){
   try{
     var s = localStorage.getItem(LS_KEY);
     if(s){
-      var o = JSON.parse(s), m = {};
-      FIELDS.forEach(function(f){
-        m[f.key] = (o[f.key] && typeof o[f.key].x==='number') ? o[f.key] : {x:f.x, y:f.y};
-      });
+      var o = JSON.parse(s) || {}, m = {};
+      // mantieni TUTTE le chiavi salvate (inclusi i testi liberi ft_*)
+      for(var k in o){ if(o[k] && typeof o[k].x==='number') m[k]=o[k]; }
+      FIELDS.forEach(function(f){ if(!m[f.key]) m[f.key]={x:f.x, y:f.y}; });
       return m;
     }
   }catch(e){}
   return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
 }
 function saveLayout(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(LAYOUT)); }catch(e){} }
+
+// ===== testi liberi =====
+var FT_KEY = 'myc_etichetta_freetexts_v1';
+var FREETEXTS = loadFT();
+function loadFT(){ try{ var s=localStorage.getItem(FT_KEY); if(s) return JSON.parse(s)||[]; }catch(e){} return []; }
+function saveFT(){ try{ localStorage.setItem(FT_KEY, JSON.stringify(FREETEXTS)); }catch(e){} }
+function ftById(key){ for(var i=0;i<FREETEXTS.length;i++){ if('ft_'+FREETEXTS[i].id===key) return FREETEXTS[i]; } return null; }
 
 // ===== toolbar toggles =====
 (function buildToggles(){
@@ -386,6 +394,16 @@ function buildLabel(row, hmm, largMm){
     }
   });
 
+  // testi liberi
+  FREETEXTS.forEach(function(ft){
+    var key='ft_'+ft.id;
+    if(!LAYOUT[key]) LAYOUT[key]={x:35,y:50,w:40};
+    var d=document.createElement('div'); d.className='txt strong';
+    d.style.width=((LAYOUT[key] && LAYOUT[key].w)||40)+'%';
+    d.innerHTML=esc(ft.text).replace(/\n/g,'<br>');
+    place(d,key);
+  });
+
   return et;
 }
 
@@ -511,6 +529,18 @@ function updateFormatoUI(){
 function makeDraggable(et){
   et.querySelectorAll('.el').forEach(function(el){
     var key=el.dataset.key;
+    // --- doppio click su un testo libero: modifica o elimina ---
+    if(key.indexOf('ft_')===0){
+      el.addEventListener('dblclick', function(ev){
+        ev.preventDefault();
+        var ft=ftById(key); if(!ft) return;
+        var nt=prompt('Modifica testo (lascia vuoto per eliminarlo):', ft.text);
+        if(nt===null) return;
+        if(nt===''){ FREETEXTS=FREETEXTS.filter(function(f){ return 'ft_'+f.id!==key; }); delete LAYOUT[key]; }
+        else { ft.text=nt; }
+        saveFT(); saveLayout(); render();
+      });
+    }
     // --- SPOSTAMENTO ---
     el.addEventListener('mousedown', function(ev){
       if(ev.target.classList && ev.target.classList.contains('rzh')) return; // la maniglia gestisce il resize
@@ -742,36 +772,39 @@ function parseLabelText(text){
   var row = {};
   // CODICE: il token "codice-simile" più lungo
   var codeCand = tokens.filter(looksLikeCode).sort(function(a,b){ return b.length-a.length; });
-  if(codeCand.length) row.codice = codeCand[0].replace(/[^A-Za-z0-9]/g,'');
-  // TAGLIA: dopo "TG" o "TG."
-  var mt = text.match(/\bTG\.?\s*([A-Z0-9]{1,4})\b/i);
+  var codeTok = codeCand.length ? codeCand[0] : '';
+  if(codeTok) row.codice = codeTok.replace(/[^A-Za-z0-9]/g,'');
+  // TAGLIA: dopo "TG" o "TG." (anche se attaccato, es. "TGL")
+  var mt = text.match(/\bTG\.?\s*([A-Za-z0-9]{1,4})\b/i);
   if(mt) row.taglia = mt[1].toUpperCase();
+  // DATA
+  var md = text.match(/\b(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\b/);
+  if(md) row.created_at = md[1];
   // REPARTO: testo sulla riga della taglia, prima di "TG"
   for(var i=0;i<lines.length;i++){
-    var mr = lines[i].match(/^(.*?)\s*\bTG\.?\s*[A-Z0-9]{1,4}\b/i);
+    var mr = lines[i].match(/^(.*?)\s*\bTG\.?\s*[A-Za-z0-9]{1,4}\b/i);
     if(mr && mr[1].trim()){ row.reparto = mr[1].trim(); break; }
   }
-  // AZIENDA / TIPO: una riga con sole lettere (no codice, no TG)
+  // TIPO / AZIENDA: la prima riga con lettere che NON è il codice e NON è la riga taglia/data
   for(var j=0;j<lines.length;j++){
-    var ln=lines[j];
-    if(/\bTG\b/i.test(ln)) continue;
-    if(looksLikeCode(ln)) continue;
-    if(/^[A-Za-zÀ-ÿ0-9 .,'&\/-]{3,}$/.test(ln) && /[A-Za-z]/.test(ln) && !row.azienda){
-      // se contiene '-' tipo "TIPO-AZIENDA"
-      if(ln.indexOf('-')!==-1){ var p=ln.split('-'); row.tipo=p[0].trim(); row.azienda=p.slice(1).join('-').trim(); }
-      else row.azienda = ln.trim();
+    var ln=lines[j].trim();
+    if(codeTok && normCode(ln)===normCode(codeTok)) continue;        // riga del codice
+    if(/\bTG\b/i.test(ln) && /\d/.test(ln)) continue;                // riga taglia/data
+    if(!/[A-Za-zÀ-ÿ]{2,}/.test(ln)) continue;                        // deve contenere lettere
+    if(ln.indexOf('-')!==-1){
+      var p=ln.split('-'); row.tipo=p[0].trim(); row.azienda=p.slice(1).join('-').trim();
+    } else {
+      row.azienda = ln;
     }
+    break;
   }
-  // DATA
-  var md = text.match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/);
-  if(md) row.created_at = md[1];
   return row;
 }
 async function pdfOcrParse(pdf){
   var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
   busy.style.display='block';
   busy.innerHTML='⏳ Lettura PDF con OCR… (il primo avvio scarica il motore OCR)';
-  var res=await pdfPagesToImages(pdf);
+  var res=await pdfPagesToImages(pdf, 5);
   var out=[];
   var worker=await Tesseract.createWorker('eng');
   for(var i=0;i<res.imgs.length;i++){
@@ -795,7 +828,7 @@ async function pdfOcrMatch(pdf){
   var busy=document.getElementById('busy'), dropEl=document.getElementById('drop');
   busy.innerHTML='⏳ Lettura PDF con OCR… (il primo avvio scarica il motore OCR, può volerci qualche secondo)';
   var idx=buildCodeIndex(CSVROWS);
-  var res=await pdfPagesToImages(pdf);
+  var res=await pdfPagesToImages(pdf, 5);
   var matched=[], unmatched=[];
   var worker = await Tesseract.createWorker('eng');
   for(var i=0;i<res.imgs.length;i++){
@@ -825,12 +858,13 @@ async function pdfOcrMatch(pdf){
   alert(msg);
 }
 
-async function pdfPagesToImages(pdf){
+async function pdfPagesToImages(pdf, scale){
+  scale = scale || 3;
   var imgs=[], wpt=0, hpt=0;
   for(var i=1;i<=pdf.numPages;i++){
     var page=await pdf.getPage(i);
     if(i===1){ var v1=page.getViewport({scale:1}); wpt=v1.width; hpt=v1.height; }
-    var vp=page.getViewport({scale:3});
+    var vp=page.getViewport({scale:scale});
     var canvas=document.createElement('canvas'); canvas.width=vp.width; canvas.height=vp.height;
     await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
     imgs.push(canvas.toDataURL('image/png'));
@@ -851,6 +885,16 @@ drop.addEventListener('click', function(){ fileInput.click(); });
 fileInput.addEventListener('change', function(){ handleFile(this.files[0]); });
 document.getElementById('btnImg').addEventListener('click', function(){ imgInput.click(); });
 imgInput.addEventListener('change', function(){ handleImg(this.files[0]); });
+document.getElementById('btnText').addEventListener('click', function(){
+  var t=prompt('Testo libero da aggiungere (compare su tutte le etichette):');
+  if(t===null || t==='') return;
+  var id=Date.now().toString(36)+Math.floor(Math.random()*1000);
+  FREETEXTS.push({id:id, text:t});
+  LAYOUT['ft_'+id]={x:35, y:50, w:40};
+  saveFT(); saveLayout();
+  if(!EDIT){ document.getElementById('btnEdit').click(); } // entra in modalità modifica per posizionarlo
+  else render();
+});
 
 drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('hover'); });
 drop.addEventListener('dragleave', function(){ drop.classList.remove('hover'); });
