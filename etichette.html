@@ -137,6 +137,9 @@
     <select id="presetSel" title="Layout salvati"><option value="">— layout —</option></select>
     <button class="ghost" id="btnSavePreset" title="Salva il layout attuale">💾</button>
     <button class="ghost" id="btnDelPreset" title="Elimina il layout selezionato">🗑</button>
+    <button class="ghost" id="btnExportLayout" title="Esporta i layout in un file">⬇️ Esporta</button>
+    <button class="ghost" id="btnImportLayout" title="Carica i layout da un file">⬆️ Carica</button>
+    <input type="file" id="layoutInput" accept=".json,application/json" style="display:none">
   </div>
   <button id="btnPrint">🖨️ Stampa</button>
   <button class="ghost" id="btnNew">📂 Altro file</button>
@@ -474,12 +477,13 @@ function render(){
 
   if(!ROWS.length){ document.getElementById('count').textContent=''; return; }
 
-  // filtro: mostra solo le righe che contengono uno dei termini (codici, nome, ecc.)
-  var base = ROWS;
+  // 1) solo le righe spuntate "da stampare" (default: tutte)
+  var base = ROWS.filter(function(row){ return row.__print !== false; });
+  // 2) filtro testo: mostra solo le righe che contengono uno dei termini (codici, nome, ecc.)
   var fq = (document.getElementById('filtro').value||'').trim().toLowerCase();
   if(fq){
     var terms = fq.split(/[\s,;\n]+/).filter(function(t){ return t.length; });
-    base = ROWS.filter(function(row){
+    base = base.filter(function(row){
       var blob = Object.keys(row).map(function(k){ return row[k]; }).join(' ').toLowerCase();
       return terms.some(function(t){ return blob.indexOf(t)!==-1; });
     });
@@ -687,12 +691,17 @@ var GRID_WRITE = { codice:'codice', nome:'fullname', azienda:'azienda', reparto:
 function buildGrid(){
   var wrap=document.getElementById('gridWrap');
   if(MODE!=='data' || !ROWS.length){ wrap.innerHTML='<div style="color:#94a3b8;font-size:13px">Carica un CSV o un PDF per modificare i dati.</div>'; return; }
+  var allOn = ROWS.every(function(r){ return r.__print!==false; });
   var html='<table style="border-collapse:collapse;font-size:12px;width:100%"><thead><tr>';
+  html+='<th style="padding:4px 6px;border:1px solid #e2e8f0;background:#ecfdf5;text-align:center"><label style="font-size:11px;color:#047857;display:block">Stampa</label><input type="checkbox" id="gridAll" '+(allOn?'checked':'')+'></th>';
   html+='<th style="position:sticky;left:0;background:#f1f5f9;padding:4px 6px;border:1px solid #e2e8f0">#</th>';
   GRID_COLS.forEach(function(c){ html+='<th style="padding:4px 6px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:left">'+c.lab+'</th>'; });
   html+='</tr></thead><tbody>';
   ROWS.forEach(function(row, ri){
-    html+='<tr><td style="position:sticky;left:0;background:#f8fafc;padding:3px 6px;border:1px solid #e2e8f0;color:#64748b">'+(ri+1)+'</td>';
+    var chk = row.__print!==false ? 'checked' : '';
+    html+='<tr>';
+    html+='<td style="text-align:center;border:1px solid #e2e8f0;background:#f0fdf4"><input type="checkbox" class="prchk" data-ri="'+ri+'" '+chk+'></td>';
+    html+='<td style="position:sticky;left:0;background:#f8fafc;padding:3px 6px;border:1px solid #e2e8f0;color:#64748b">'+(ri+1)+'</td>';
     GRID_COLS.forEach(function(c){
       var v = cleanVal(get(row, GRID_READ[c.key]));
       html+='<td style="padding:0;border:1px solid #e2e8f0"><input data-ri="'+ri+'" data-ck="'+c.key+'" value="'+esc(v).replace(/"/g,'&quot;')+'" style="border:none;padding:3px 6px;width:120px;font-size:12px;background:transparent"></td>';
@@ -701,12 +710,30 @@ function buildGrid(){
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
-  wrap.querySelectorAll('input').forEach(function(inp){
+  // modifica valori
+  wrap.querySelectorAll('input[data-ck]').forEach(function(inp){
     inp.addEventListener('input', function(){
       var ri=+this.dataset.ri, ck=this.dataset.ck;
-      ROWS[ri][GRID_WRITE[ck]] = this.value;  // override: get() legge per primo questo campo
+      ROWS[ri][GRID_WRITE[ck]] = this.value;
       render();
     });
+  });
+  // spunta "da stampare" per riga
+  wrap.querySelectorAll('.prchk').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      ROWS[+this.dataset.ri].__print = this.checked;
+      render();
+      var all=ROWS.every(function(r){ return r.__print!==false; });
+      var ga=document.getElementById('gridAll'); if(ga) ga.checked=all;
+    });
+  });
+  // seleziona / deseleziona tutto
+  var ga=document.getElementById('gridAll');
+  if(ga) ga.addEventListener('change', function(){
+    var on=this.checked;
+    ROWS.forEach(function(r){ r.__print = on; });
+    wrap.querySelectorAll('.prchk').forEach(function(cb){ cb.checked=on; });
+    render();
   });
 }
 
@@ -990,6 +1017,41 @@ document.getElementById('btnDelPreset').addEventListener('click', function(){
   if(!confirm('Eliminare il layout "'+name+'"?')) return;
   var presets=loadPresets(); delete presets[name]; savePresets(presets);
   refreshPresetSelect(''); document.getElementById('presetSel').value='';
+});
+// --- esporta / carica layout su file ---
+function downloadJSON(obj, filename){
+  var blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+document.getElementById('btnExportLayout').addEventListener('click', function(){
+  var name=document.getElementById('presetSel').value||'layout';
+  var data={ app:'myc-etichetta', version:1, name:name, current:currentPreset(), presets:loadPresets() };
+  downloadJSON(data, 'layout-etichette-'+name.replace(/[^a-z0-9]+/gi,'_')+'.json');
+});
+document.getElementById('btnImportLayout').addEventListener('click', function(){
+  document.getElementById('layoutInput').click();
+});
+document.getElementById('layoutInput').addEventListener('change', function(){
+  var f=this.files[0]; if(!f) return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      var presets=loadPresets(), added=0;
+      if(data.presets && typeof data.presets==='object'){
+        for(var k in data.presets){ presets[k]=data.presets[k]; added++; }
+        savePresets(presets);
+      }
+      refreshPresetSelect();
+      if(data.current){ applyPreset(data.current); }
+      else if(data.layout){ applyPreset(data); } // file che contiene direttamente un layout
+      alert('Layout caricati: '+added+' aggiunti all elenco'+(data.current||data.layout?' e applicato il layout del file.':'.'));
+    }catch(err){ alert('File non valido: '+err.message); }
+  };
+  reader.readAsText(f,'UTF-8');
+  this.value='';
 });
 document.getElementById('btnData').addEventListener('click', function(){
   var g=document.getElementById('grid');
