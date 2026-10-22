@@ -63,6 +63,12 @@
   .el.txt .k { color:#64748b; font-weight:600; }
   .el[contenteditable="true"]{ outline:1px dashed #2563eb; cursor:text; }
   .rzh { position:absolute; right:-4px; bottom:-4px; width:10px; height:10px; background:#16a34a; border:1px solid #fff; border-radius:2px; cursor:nwse-resize; z-index:40; }
+  .fsbar { position:absolute; right:0; top:-17px; display:flex; align-items:center; gap:2px; background:#0f172a; border-radius:4px; padding:1px 3px; z-index:42; font-family:Arial; font-size:10px; line-height:12px; color:#fff; white-space:nowrap; font-weight:400; }
+  .et.editable .el .fsbar { display:none; }
+  .et.editable .el:hover .fsbar { display:flex; }
+  .fsbar span { cursor:pointer; padding:0 4px; border-radius:3px; background:#2563eb; font-weight:700; user-select:none; }
+  .fsbar span:hover { background:#1d4ed8; }
+  .fsbar i { font-style:normal; min-width:30px; text-align:center; }
   .ftdel { position:absolute; left:-7px; top:-7px; width:15px; height:15px; background:#dc2626; color:#fff; border:1px solid #fff; border-radius:50%; font-size:10px; line-height:13px; text-align:center; cursor:pointer; z-index:41; font-family:Arial; }
   .el.taglia { text-align:center; line-height:1; border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm; }
   .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
@@ -89,6 +95,7 @@
     .et.editable .el { outline:none !important; background:none !important; }
     .rzh { display:none !important; }
     .ftdel { display:none !important; }
+    .fsbar { display:none !important; }
   }
 </style>
 <style id="pageStyle">@page { size:A4; margin:0; }</style>
@@ -148,7 +155,7 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. I <b>testi liberi</b> si correggono con <b>doppio click</b> e si eliminano con la <b>✕ rossa</b> in alto a sinistra. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
+  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. Con <b>A− / A+</b> sopra ogni testo cambi la <b>dimensione del carattere</b>. I <b>testi liberi</b> si correggono con <b>doppio click</b> e si eliminano con la <b>✕ rossa</b> in alto a sinistra. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
 </div>
 
@@ -202,6 +209,7 @@ var PDFIMG = [];       // immagini pagine PDF (data URL)
 var CSVROWS = [];      // CSV completo caricato (master per l'aggancio OCR)
 var LS_KEY = 'myc_etichetta_layout_v4';
 
+var DEFAULT_FS = 8;     // pt, corrisponde ai 2.8mm del CSS .el.txt
 var DEFAULT_LAYOUT = {};
 FIELDS.forEach(function(f){ DEFAULT_LAYOUT[f.key] = {x:f.x, y:f.y}; });
 var LAYOUT = loadLayout();
@@ -444,6 +452,7 @@ function buildLabel(row, hmm, largMm){
       var d=document.createElement('div'); d.className='txt'+(f.strong?' strong':'');
       var wPct = (LAYOUT[f.key] && LAYOUT[f.key].w) || 55;
       d.style.width = wPct+'%';   // il testo va a capo dentro questa larghezza (niente taglio)
+      if(LAYOUT[f.key] && LAYOUT[f.key].fs) d.style.fontSize = LAYOUT[f.key].fs+'pt';
       d.innerHTML = (f.prefix ? '<span class="k">'+esc(f.prefix)+': </span>' : '') + esc(val);
       place(d,f.key);
     }
@@ -455,6 +464,7 @@ function buildLabel(row, hmm, largMm){
     if(!LAYOUT[key]) LAYOUT[key]={x:35,y:50,w:40};
     var d=document.createElement('div'); d.className='txt strong';
     d.style.width=((LAYOUT[key] && LAYOUT[key].w)||40)+'%';
+    if(LAYOUT[key].fs) d.style.fontSize=LAYOUT[key].fs+'pt';
     d.innerHTML=esc(ft.text).replace(/\n/g,'<br>');
     place(d,key);
   });
@@ -625,6 +635,25 @@ function makeDraggable(et){
     // --- MANIGLIA DI RIDIMENSIONAMENTO ---
     var h=document.createElement('div'); h.className='rzh'; el.appendChild(h);
     var isText = el.classList.contains('txt');
+    // --- DIMENSIONE CARATTERE (solo testi) ---
+    if(isText){
+      var fsb=document.createElement('div'); fsb.className='fsbar';
+      var bMinus=document.createElement('span'); bMinus.textContent='A−'; bMinus.title='Carattere più piccolo';
+      var fsLbl=document.createElement('i');
+      var bPlus=document.createElement('span'); bPlus.textContent='A+'; bPlus.title='Carattere più grande';
+      fsb.appendChild(bMinus); fsb.appendChild(fsLbl); fsb.appendChild(bPlus); el.appendChild(fsb);
+      var curFs=function(){ return LAYOUT[key].fs || DEFAULT_FS; };
+      fsLbl.textContent=curFs()+'pt';
+      fsb.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      fsb.addEventListener('dblclick', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      var stepFs=function(d){
+        LAYOUT[key].fs=Math.round(Math.max(4, Math.min(40, curFs()+d))*2)/2;
+        fsLbl.textContent=LAYOUT[key].fs+'pt';
+        saveLayout(); applyLayoutToAll();
+      };
+      bMinus.addEventListener('click', function(ev){ ev.stopPropagation(); stepFs(-0.5); });
+      bPlus.addEventListener('click', function(ev){ ev.stopPropagation(); stepFs(0.5); });
+    }
     h.addEventListener('mousedown', function(ev){
       ev.preventDefault(); ev.stopPropagation();
       var rect=et.getBoundingClientRect();
@@ -656,6 +685,7 @@ function applyLayoutToAll(){
       var k=el.dataset.key; if(!LAYOUT[k]) return;
       el.style.left=LAYOUT[k].x+'%'; el.style.top=LAYOUT[k].y+'%';
       if(el.classList.contains('txt') && LAYOUT[k].w) el.style.width=LAYOUT[k].w+'%';
+      if(el.classList.contains('txt') && LAYOUT[k].fs) el.style.fontSize=LAYOUT[k].fs+'pt';
       if(LAYOUT[k].s && LAYOUT[k].s!==1){ el.style.transform='scale('+LAYOUT[k].s+')'; el.style.transformOrigin='top left'; }
     });
   });
