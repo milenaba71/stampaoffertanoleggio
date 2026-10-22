@@ -63,12 +63,11 @@
   .el.txt .k { color:#64748b; font-weight:600; }
   .el[contenteditable="true"]{ outline:1px dashed #2563eb; cursor:text; }
   .rzh { position:absolute; right:-4px; bottom:-4px; width:10px; height:10px; background:#16a34a; border:1px solid #fff; border-radius:2px; cursor:nwse-resize; z-index:40; }
-  .fsbar { position:absolute; right:0; top:-17px; display:flex; align-items:center; gap:2px; background:#0f172a; border-radius:4px; padding:1px 3px; z-index:42; font-family:Arial; font-size:10px; line-height:12px; color:#fff; white-space:nowrap; font-weight:400; }
-  .et.editable .el .fsbar { display:none; }
-  .et.editable .el:hover .fsbar { display:flex; }
-  .fsbar span { cursor:pointer; padding:0 4px; border-radius:3px; background:#2563eb; font-weight:700; user-select:none; }
-  .fsbar span:hover { background:#1d4ed8; }
-  .fsbar i { font-style:normal; min-width:30px; text-align:center; }
+  .et.editable .el.fsactive { outline:2px solid #2563eb !important; background:rgba(37,99,235,.08); }
+  #fsCtl { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #a7f3d0; border-radius:8px; padding:3px 8px; margin-left:6px; }
+  #fsCtl button { background:#2563eb; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:14px; font-weight:700; cursor:pointer; }
+  #fsCtl button:disabled { background:#cbd5e1; cursor:default; }
+  #fsVal { min-width:40px; text-align:center; font-weight:700; }
   .ftdel { position:absolute; left:-7px; top:-7px; width:15px; height:15px; background:#dc2626; color:#fff; border:1px solid #fff; border-radius:50%; font-size:10px; line-height:13px; text-align:center; cursor:pointer; z-index:41; font-family:Arial; }
   .el.taglia { text-align:center; line-height:1; border:1px solid #0f172a; border-radius:1.5mm; padding:.8mm 1.4mm; }
   .el.taglia .lbl { font-size:1.9mm; color:#475569; text-transform:uppercase; letter-spacing:.3px; }
@@ -95,7 +94,6 @@
     .et.editable .el { outline:none !important; background:none !important; }
     .rzh { display:none !important; }
     .ftdel { display:none !important; }
-    .fsbar { display:none !important; }
   }
 </style>
 <style id="pageStyle">@page { size:A4; margin:0; }</style>
@@ -155,8 +153,15 @@
 </div>
 
 <div id="editbar">
-  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. Con <b>A− / A+</b> sopra ogni testo cambi la <b>dimensione del carattere</b>. I <b>testi liberi</b> si correggono con <b>doppio click</b> e si eliminano con la <b>✕ rossa</b> in alto a sinistra. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
+  ✏️ <b>Modalità sposta/ridimensiona</b>: trascina gli elementi sulla <b>prima etichetta</b> (bordo verde) per spostarli; usa il <b>quadratino verde</b> in basso a destra per allargare il campo (il testo va a capo) o ingrandire QR/barcode/logo/taglia. <b>Clicca un testo</b> (diventa blu) e usa <b>A− / A+</b> qui sotto per cambiare la <b>dimensione del carattere</b>. La <b>✕ rossa</b> (o il <b>doppio click</b>) toglie un campo; sui <b>testi liberi</b> il doppio click serve a correggerli. Tutto si applica a tutte le etichette e viene salvato. Per correggere i valori usa <b>📝 Dati</b>.
+  <div style="margin-top:6px">
+    <span id="fsCtl">🔤 Carattere di <b id="fsName">— clicca un testo —</b>
+      <button id="fsMinus" title="Carattere più piccolo" disabled>A−</button>
+      <span id="fsVal">–</span>
+      <button id="fsPlus" title="Carattere più grande" disabled>A+</button>
+    </span>
   &nbsp; <button class="ghost" id="btnReset" style="padding:4px 12px">↺ Ripristina layout</button>
+  </div>
 </div>
 
 <div id="drop">
@@ -474,6 +479,7 @@ function buildLabel(row, hmm, largMm){
 
 // ===== render =====
 function render(){
+  setTimeout(updateFsCtl,0);
   var out=document.getElementById('out'); out.innerHTML='';
   var copie=parseInt(document.getElementById('copie').value,10)||1;
 
@@ -614,6 +620,19 @@ function makeDraggable(et){
         else { ft.text=nt; }
         saveFT(); saveLayout(); render();
       });
+    } else {
+      // campo dati: ✕ o doppio click lo nascondono (si riattiva dalla casella in alto)
+      var fcb=document.getElementById('f_'+key);
+      var hideField=function(){
+        if(!fcb) return;
+        if(!confirm('Togliere il campo "'+fcb.nextSibling.textContent+'" dalle etichette?\n(Puoi rimetterlo spuntando la sua casella in alto.)')) return;
+        fcb.checked=false; render();
+      };
+      var del2=document.createElement('div'); del2.className='ftdel'; del2.textContent='✕'; del2.title='Togli questo campo';
+      del2.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      del2.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); hideField(); });
+      el.appendChild(del2);
+      el.addEventListener('dblclick', function(ev){ ev.preventDefault(); hideField(); });
     }
     // --- SPOSTAMENTO ---
     el.addEventListener('mousedown', function(ev){
@@ -637,22 +656,8 @@ function makeDraggable(et){
     var isText = el.classList.contains('txt');
     // --- DIMENSIONE CARATTERE (solo testi) ---
     if(isText){
-      var fsb=document.createElement('div'); fsb.className='fsbar';
-      var bMinus=document.createElement('span'); bMinus.textContent='A−'; bMinus.title='Carattere più piccolo';
-      var fsLbl=document.createElement('i');
-      var bPlus=document.createElement('span'); bPlus.textContent='A+'; bPlus.title='Carattere più grande';
-      fsb.appendChild(bMinus); fsb.appendChild(fsLbl); fsb.appendChild(bPlus); el.appendChild(fsb);
-      var curFs=function(){ return LAYOUT[key].fs || DEFAULT_FS; };
-      fsLbl.textContent=curFs()+'pt';
-      fsb.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
-      fsb.addEventListener('dblclick', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
-      var stepFs=function(d){
-        LAYOUT[key].fs=Math.round(Math.max(4, Math.min(40, curFs()+d))*2)/2;
-        fsLbl.textContent=LAYOUT[key].fs+'pt';
-        saveLayout(); applyLayoutToAll();
-      };
-      bMinus.addEventListener('click', function(ev){ ev.stopPropagation(); stepFs(-0.5); });
-      bPlus.addEventListener('click', function(ev){ ev.stopPropagation(); stepFs(0.5); });
+      if(key===SELKEY) el.classList.add('fsactive');
+      el.addEventListener('mousedown', function(){ selectText(key); });
     }
     h.addEventListener('mousedown', function(ev){
       ev.preventDefault(); ev.stopPropagation();
@@ -678,6 +683,31 @@ function makeDraggable(et){
       document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
     });
   });
+}
+// ===== dimensione carattere del testo selezionato =====
+var SELKEY = null;
+function keyLabel(key){
+  if(key.indexOf('ft_')===0){ var ft=ftById(key); return ft ? '"'+ft.text.slice(0,20)+'"' : 'testo'; }
+  for(var i=0;i<FIELDS.length;i++){ if(FIELDS[i].key===key) return FIELDS[i].lab; }
+  return key;
+}
+function selectText(key){
+  SELKEY=key;
+  document.querySelectorAll('#out .et.editable .el').forEach(function(o){ o.classList.toggle('fsactive', o.dataset.key===key); });
+  updateFsCtl();
+}
+function updateFsCtl(){
+  var ok = SELKEY && LAYOUT[SELKEY] && document.querySelector('#out .et.editable .el[data-key="'+SELKEY+'"]');
+  document.getElementById('fsName').textContent = ok ? keyLabel(SELKEY) : '— clicca un testo —';
+  document.getElementById('fsVal').textContent = ok ? (LAYOUT[SELKEY].fs || DEFAULT_FS)+'pt' : '–';
+  document.getElementById('fsMinus').disabled = !ok;
+  document.getElementById('fsPlus').disabled = !ok;
+}
+function stepFs(d){
+  if(!SELKEY || !LAYOUT[SELKEY]) return;
+  var cur = LAYOUT[SELKEY].fs || DEFAULT_FS;
+  LAYOUT[SELKEY].fs = Math.round(Math.max(4, Math.min(40, cur+d))*2)/2;
+  saveLayout(); applyLayoutToAll(); updateFsCtl();
 }
 function applyLayoutToAll(){
   document.querySelectorAll('#out .et').forEach(function(et){
@@ -1090,6 +1120,8 @@ document.getElementById('btnData').addEventListener('click', function(){
   this.classList.toggle('on', show);
   if(show) buildGrid();
 });
+document.getElementById('fsMinus').addEventListener('click', function(){ stepFs(-0.5); });
+document.getElementById('fsPlus').addEventListener('click', function(){ stepFs(0.5); });
 document.getElementById('btnReset').addEventListener('click', function(){
   LAYOUT=JSON.parse(JSON.stringify(DEFAULT_LAYOUT)); saveLayout(); render();
 });
